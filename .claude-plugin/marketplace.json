@@ -1,0 +1,8 @@
+{
+  "name": "my-claude-plugins",
+  "owner": { "name": "Carlos Herrero" },
+  "metadata": {
+    "description": "General-purpose plugins for Claude Code: skills, hooks, commands and agents."
+  },
+  "plugins": []
+}
