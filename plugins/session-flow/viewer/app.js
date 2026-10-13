@@ -10,7 +10,6 @@ const GROUP_MIN = 3
 
 const KINDS = [
   { key: 'tool', label: 'Tools', color: '--c-tool' },
-  { key: 'skill', label: 'Skills', color: '--c-skill' },
   { key: 'hook', label: 'Hooks', color: '--c-hook' },
   { key: 'text', label: 'Text', color: '--c-text' },
   { key: 'thinking', label: 'Thinking', color: '--c-thinking' },
@@ -466,6 +465,10 @@ function build(records, hooks, hookConf = []) {
       n.sub = [sp.type, sp.model, sp.background ? 'background' : null].filter(Boolean).join(' · ')
     }
     if (n.kind === 'ctxgroup') n.sub = `${n.children.length} blocks`
+    if (n.kind === 'skill') {
+      n.family = 'skill'
+      n.data.toolName ??= 'Skill'
+    }
     if (n.t0 == null) n.t0 = n.children.find(c => c.t0 != null)?.t0
     const kidsEnd = Math.max(...n.children.map(c => c.t1 ?? c.t0 ?? 0), 0)
     n.tEnd = Math.max(n.t1 ?? 0, kidsEnd, n.t0 ?? 0)
@@ -501,7 +504,7 @@ function build(records, hooks, hookConf = []) {
 // Visible rows: filters, grouping, steps toggle.
 
 function category(n) {
-  if (n.kind === 'tool' || n.kind === 'group') return n.family === 'skill' ? 'skill' : 'tool'
+  if (n.kind === 'tool' || n.kind === 'group' || n.kind === 'skill') return 'tool'
   if (n.kind === 'ctxgroup') return 'context'
   return n.kind
 }
@@ -718,7 +721,9 @@ function draw() {
 
 function refresh() {
   state.visible = computeVisible()
-  draw()
+  if (state.view === 'gantt') drawGantt()
+  else if (state.view === 'diagram') drawDiagram()
+  else draw()
 }
 
 // Inspector
@@ -1037,7 +1042,6 @@ function rebuild() {
   $('#live').hidden = !state.live
   sessionStats()
   drawHealth()
-  if (state.view === 'gantt') drawGantt()
   fillScope()
   if (!$('#family-pop').hidden) fillFamilies()
   refresh()
@@ -1050,7 +1054,7 @@ const PRESETS = {
   everything: { label: 'Everything', kinds: KINDS.map(k => k.key), steps: true },
   agents: { label: 'Agents only', kinds: [], steps: false },
   hooks: { label: 'Hooks only', kinds: ['hook'], steps: false },
-  tools: { label: 'Tools only', kinds: ['tool', 'skill'], steps: false },
+  tools: { label: 'Tools only', kinds: ['tool'], steps: false },
   conversation: { label: 'Conversation', kinds: ['text', 'thinking'], steps: false },
   nocontext: { label: 'No context', kinds: KINDS.map(k => k.key).filter(k => k !== 'context'), steps: true },
 }
@@ -1117,7 +1121,7 @@ function fillScope() {
 function fillFamilies() {
   const counts = new Map()
   for (const n of state.model?.nodes.values() ?? []) {
-    if (n.kind !== 'tool' || n.mergedInto || n.family === 'skill') continue
+    if ((n.kind !== 'tool' && n.kind !== 'skill') || n.mergedInto) continue
     const fam = counts.get(n.family) ?? { n: 0, tools: new Map() }
     fam.n++
     fam.tools.set(n.data.toolName, (fam.tools.get(n.data.toolName) ?? 0) + 1)
@@ -1252,6 +1256,12 @@ function wire() {
   $('#session-search').addEventListener('input', drawSessions)
   for (const b of document.querySelectorAll('.mode')) b.addEventListener('click', () => setMode(b.dataset.mode))
   for (const b of document.querySelectorAll('.view')) b.addEventListener('click', () => setView(b.dataset.view))
+  $('#diagram').addEventListener('click', e => {
+    const g = e.target.closest('[data-gid]')
+    if (!g) return
+    select(g.dataset.gid)
+    drawDiagram()
+  })
   const gantt = $('#gantt')
   gantt.addEventListener('click', e => {
     const g = e.target.closest('[data-gid]')
@@ -1282,7 +1292,7 @@ function wire() {
       gantt.scrollTop = drag.t - (e.clientY - drag.y)
       return
     }
-    const g = e.target.closest?.('#gantt .gbar')
+    const g = e.target.closest?.('#gantt .gbar, #gantt .gmark')
     if (!g) {
       tip.hidden = true
       return
@@ -1356,7 +1366,7 @@ function wire() {
     const f = state.filters
     f.tools.clear()
     if (all.dataset.famAll === '1') f.families.clear()
-    else for (const k of Object.keys(FAMILIES)) if (k !== 'skill') f.families.add(k)
+    else for (const k of Object.keys(FAMILIES)) f.families.add(k)
     changed()
   })
   document.addEventListener('click', e => {
@@ -1425,7 +1435,7 @@ function wire() {
       case '/': $('#q').focus(); break
       case '?': toggleHelp(); break
       case 'Escape': toggleHelp(false); break
-      case 't': setView(state.view === 'tree' ? 'gantt' : 'tree'); break
+      case 't': setView({ tree: 'gantt', gantt: 'diagram', diagram: 'tree' }[state.view]); break
       case 'e': state.model && nextError(); break
       case 'f': setFollow(!state.follow); break
       default: return
@@ -1445,8 +1455,23 @@ function setView(view) {
   for (const b of document.querySelectorAll('.view')) b.classList.toggle('on', b.dataset.view === view)
   $('#tree').hidden = view !== 'tree'
   $('#gantt').hidden = view !== 'gantt'
-  if (view === 'gantt') drawGantt()
-  else draw()
+  $('#diagram').hidden = view !== 'diagram'
+  refresh()
+}
+
+// Lanes the scope allows: all agents, the main one, or one agent and those it launched.
+function laneList(m) {
+  const scope = state.filters.scope
+  const lanes = [{ agent: null, label: 'Main agent', sub: m.root.children.find(t => t.kind === 'turn')?.children.find(c => c.kind === 'step')?.data.start?.model ?? '', depth: 0 }]
+  for (const a of agentList()) lanes.push({ agent: a.n.agent, label: a.n.label, sub: [a.n.data.spawn?.type, a.n.data.spawn?.model].filter(Boolean).join(' · '), depth: a.depth + 1, node: a.n })
+  if (scope === 'main') return lanes.slice(0, 1)
+  if (scope === 'all') return lanes
+  const target = m.nodes.get(scope)
+  const inside = l => {
+    for (let p = l.node; p; p = p.parent) if (p === target) return true
+    return false
+  }
+  return lanes.filter(inside)
 }
 
 function laneOf(n) {
@@ -1461,23 +1486,30 @@ function drawGantt() {
     inner.innerHTML = ''
     return
   }
-  const lanes = [{ agent: null, label: 'Main agent', sub: m.root.children.find(t => t.kind === 'turn')?.children.find(c => c.kind === 'step')?.data.start?.model ?? '', depth: 0 }]
-  for (const a of agentList()) lanes.push({ agent: a.n.agent, label: a.n.label, sub: [a.n.data.spawn?.type, a.n.data.spawn?.model].filter(Boolean).join(' · '), depth: a.depth + 1, node: a.n })
+  const lanes = laneList(m)
   const laneIdx = new Map(lanes.map((l, i) => [l.agent, i]))
+  const f = state.filters
   const bars = []
+  const marks = []
   for (const n of m.nodes.values()) {
     if (n.mergedInto || n.t0 == null || n.kind === 'group') continue
-    const end = n.t1 ?? (n.status === 'running' ? m.S.last : n.t0)
-    if (n.kind === 'step') bars.push({ n, lane: laneIdx.get(n.agent ?? null) ?? 0, track: 'model', t0: n.t0, t1: end })
-    else if (n.kind === 'tool' && kindShown(n)) bars.push({ n, lane: laneIdx.get(n.agent ?? null) ?? 0, track: 'tool', t0: n.t0, t1: end })
-    else if (n.kind === 'agent') bars.push({ n, lane: laneIdx.get(laneOf(n)) ?? 0, track: 'tool', t0: n.t0, t1: n.t1 ?? n.tEnd ?? n.t0 })
+    const lane = laneIdx.get(n.kind === 'agent' ? laneOf(n) : n.agent ?? null)
+    if (lane == null) continue
+    const end = n.kind === 'agent' ? n.t1 ?? n.tEnd ?? n.t0 : n.t1 ?? (n.status === 'running' ? m.S.last : n.t0)
+    const short = f.minMs && end - n.t0 < f.minMs
+    if (n.kind === 'step') {
+      if (f.steps && !short) bars.push({ n, lane, track: 'model', t0: n.t0, t1: end })
+    } else if (n.kind === 'tool' || n.kind === 'agent') {
+      if ((n.kind === 'agent' || kindShown(n)) && !short) bars.push({ n, lane, track: 'tool', t0: n.t0, t1: end })
+    } else if (['text', 'thinking', 'hook', 'skill'].includes(n.kind) && kindShown(n) && !f.minMs) marks.push({ n, lane, t: n.t0 })
   }
+  const dim = n => (f.q && !searchText(n).includes(f.q)) || (f.errors && n.status !== 'error' && n.status !== 'denied')
   if (!bars.length) {
     inner.innerHTML = '<div class="dim" style="padding:30px">Nothing timed in this session yet.</div>'
     return
   }
   // Fold idle gaps.
-  const spans = bars.map(b => [b.t0, Math.max(b.t1, b.t0 + 1)]).sort((a, b) => a[0] - b[0])
+  const spans = [...bars.map(b => [b.t0, Math.max(b.t1, b.t0 + 1)]), ...marks.map(k => [k.t, k.t + 1])].sort((a, b) => a[0] - b[0])
   const segs = []
   for (const [a, b] of spans) {
     const last = segs.at(-1)
@@ -1510,7 +1542,7 @@ function drawGantt() {
   let y = 30
   for (const [i, l] of lanes.entries()) {
     l.y = y
-    l.h = 10 + GANTT.MODEL_H + 6 + Math.max(1, rowsOf[i].length) * (GANTT.TOOL_H + 3) + 8
+    l.h = 10 + GANTT.MODEL_H + 6 + Math.max(1, rowsOf[i].length) * (GANTT.TOOL_H + 3) + 8 + 8
     y += l.h
   }
   // Axis ticks inside each active segment, relative to the session's first activity.
@@ -1537,11 +1569,14 @@ function drawGantt() {
     const l = lanes[b.lane]
     const left = X(b.t0)
     const w = Math.max(2, X(b.t1) - left)
-    const top = b.track === 'model' ? l.y + 10 : l.y + 10 + GANTT.MODEL_H + 6 + b.row * (GANTT.TOOL_H + 3)
+    const top = b.track === 'model' ? l.y + 10 : l.y + 10 + GANTT.MODEL_H + 6 + 8 + b.row * (GANTT.TOOL_H + 3)
     const h = b.track === 'model' ? GANTT.MODEL_H : GANTT.TOOL_H
-    const cls = ['gbar', `g-${b.n.kind}`, `st-${b.n.status}`, b.n.id === state.selected ? 'sel' : ''].join(' ')
+    const cls = ['gbar', `g-${b.n.kind}`, `st-${b.n.status}`, b.n.id === state.selected ? 'sel' : '', dim(b.n) ? 'dim' : ''].join(' ')
     const label = w > 60 && b.track === 'tool' ? `<span>${esc(oneLine(b.n.label + (b.n.sub ? ` · ${b.n.sub}` : ''), Math.floor(w / 6.5)))}</span>` : ''
     return `<i class="${cls}" data-gid="${esc(b.n.id)}" style="left:${left}px;top:${top}px;width:${w}px;height:${h}px;--c:${color(b.n)}">${label}</i>`
+  }).join('') + marks.map(k => {
+    const l = lanes[k.lane]
+    return `<i class="gmark g-${k.n.kind}${dim(k.n) ? ' dim' : ''}${k.n.id === state.selected ? ' sel' : ''}" data-gid="${esc(k.n.id)}" style="left:${X(k.t)}px;top:${l.y + 10 + GANTT.MODEL_H + 4}px;--c:${color(k.n)}"></i>`
   }).join('')
   const laneHtml = lanes.map(l => `<div class="glane" style="top:${l.y}px;height:${l.h}px">
       <div class="glabel" style="width:${GANTT.LABEL_W}px;padding-left:${10 + l.depth * 14}px" ${l.node ? `data-gid="${esc(l.node.id)}"` : ''}>
@@ -1552,6 +1587,126 @@ function drawGantt() {
   inner.style.height = `${y + 20}px`
   inner.innerHTML = `${laneHtml}<div class="gplot" style="left:${GANTT.LABEL_W}px;width:${total + 20}px;height:${y}px"><div class="gaxis">${axis}</div>${breaks}${turns}${barHtml}</div>`
   inner.style.width = `${GANTT.LABEL_W + total + 40}px`
+}
+
+// Diagram: a sequence diagram. One column per agent, events going down in the
+// order they happened (not to scale); runs of one tool fold into one box; an
+// arrow goes from where an agent was launched to its column, and back from its
+// end to the moment its result reached the launcher.
+
+const DIAG = { COL_W: 200, GAP: 34, ROW_H: 50, TOP: 56 }
+
+function drawDiagram() {
+  const m = state.model
+  const inner = $('#diagram-inner')
+  if (!m) {
+    inner.innerHTML = ''
+    return
+  }
+  const f = state.filters
+  const lanes = laneList(m)
+  const col = new Map(lanes.map((l, i) => [l.agent, i]))
+  const dim = n => (f.q && !searchText(n).includes(f.q)) || (f.errors && n.status !== 'error' && n.status !== 'denied')
+  // Items in time order: boxes, launches, returns, turn separators.
+  const items = []
+  for (const n of m.nodes.values()) {
+    if (n.mergedInto || n.t0 == null) continue
+    if (n.kind === 'agent') {
+      const from = col.get(laneOf(n))
+      const to = col.get(n.agent)
+      if (from != null) items.push({ type: 'launch', n, col: from, to, t: n.t0 })
+      if (to != null && n.t1 != null && from != null) items.push({ type: 'return', n, col: from, from: to, t: n.t1 })
+      continue
+    }
+    const c = col.get(n.agent ?? null)
+    if (c == null) continue
+    const short = f.minMs && (n.t1 ?? n.t0) - n.t0 < f.minMs
+    if ((n.kind === 'tool' || n.kind === 'skill') && kindShown(n) && !short) items.push({ type: 'box', n, col: c, t: n.t0 })
+    else if ((n.kind === 'text' || (n.kind === 'thinking' && kindShown(n))) && kindShown(n) && !f.minMs) items.push({ type: 'box', n, col: c, t: n.t0 })
+  }
+  for (const t of m.root.children) if (t.kind === 'turn' && t.t0 != null) items.push({ type: 'turn', n: t, t: t.t0 - 0.5 })
+  items.sort((a, b) => a.t - b.t || (a.type === 'turn' ? -1 : 0))
+  // Fold runs of one tool in a column (nothing else in that column between them).
+  const last = new Map()
+  const rows = []
+  for (const it of items) {
+    if (it.type === 'box' && it.n.kind === 'tool') {
+      const prev = last.get(it.col)
+      if (prev?.type === 'box' && prev.n.kind === 'tool' && prev.n.data.toolName === it.n.data.toolName) {
+        ;(prev.more ??= []).push(it.n)
+        continue
+      }
+    }
+    if (it.col != null) last.set(it.col, it)
+    if (it.type === 'turn') last.clear()
+    it.row = rows.length
+    rows.push(it)
+  }
+  const x = c => 20 + c * (DIAG.COL_W + DIAG.GAP)
+  const y = r => DIAG.TOP + r * DIAG.ROW_H
+  const width = x(lanes.length) + 20
+  const height = y(rows.length) + 40
+  // Lifelines: from an agent's launch to its return (or the end).
+  const life = lanes.map(l => ({ a: l.agent ? Infinity : 0, b: l.agent ? -Infinity : rows.length }))
+  for (const it of rows) {
+    if (it.type === 'launch' && it.to != null) life[it.to].a = Math.min(life[it.to].a, it.row)
+    if (it.type === 'return' && it.from != null) life[it.from].b = Math.max(life[it.from].b, it.row)
+    if (it.type === 'box') {
+      life[it.col].a = Math.min(life[it.col].a, it.row)
+      life[it.col].b = Math.max(life[it.col].b, it.row + 1)
+    }
+  }
+  let svg = ''
+  for (const [i, l] of life.entries()) {
+    if (!isFinite(l.a)) continue
+    const cx = x(i) + DIAG.COL_W / 2
+    svg += `<line class="dlife" x1="${cx}" y1="${y(l.a)}" x2="${cx}" y2="${y(Math.max(l.b, l.a + 1))}"/>`
+  }
+  let html = ''
+  for (const it of rows) {
+    const top = y(it.row)
+    if (it.type === 'turn') {
+      html += `<div class="dturn" style="top:${top + 14}px;width:${width - 20}px" data-gid="${esc(it.n.id)}"><b>${esc(oneLine(it.n.label, 120))}</b></div>`
+      continue
+    }
+    if (it.type === 'launch') {
+      const x1 = x(it.col) + DIAG.COL_W / 2
+      const x2 = it.to != null ? x(it.to) + DIAG.COL_W / 2 : x1
+      html += `<div class="dlaunch${dim(it.n) ? ' dim' : ''}${it.n.id === state.selected ? ' sel' : ''}" style="left:${x(it.col) + 18}px;top:${top + 8}px;width:${DIAG.COL_W - 36}px" data-gid="${esc(it.n.id)}"><span class="ico"><svg viewBox="0 0 24 24">${ICONS.launch}</svg></span><span class="dtxt"><b>${esc(oneLine(it.n.label, 40))}</b><small>${esc(oneLine(it.n.sub, 40))}</small></span></div>`
+      if (it.to != null) {
+        const yy = top + 26
+        const right = x2 > x1
+        svg += `<path class="darrow launch" d="M${right ? x(it.col) + DIAG.COL_W - 18 : x(it.col) + 18} ${yy} H${right ? x2 - 8 : x2 + 8}" marker-end="url(#dah)"/>`
+      }
+      continue
+    }
+    if (it.type === 'return') {
+      const x1 = x(it.from) + DIAG.COL_W / 2
+      const x2 = x(it.col) + DIAG.COL_W / 2
+      const yy = top + 22
+      svg += `<path class="darrow back" d="M${x1} ${yy} H${x2 + (x1 > x2 ? 8 : -8)}" marker-end="url(#dah2)"/>`
+      html += `<div class="dreturn" style="left:${Math.min(x1, x2) + 12}px;top:${yy - 18}px;width:${Math.abs(x1 - x2) - 24}px" data-gid="${esc(it.n.id)}">${esc(it.n.data.spawn?.background ? 'result arrives' : 'returns')} · ${esc(fmtMs((it.n.t1 ?? it.n.t0) - it.n.t0))}</div>`
+      continue
+    }
+    const n = it.n
+    const more = it.more?.length ?? 0
+    const all = [n, ...(it.more ?? [])]
+    const dur = all.reduce((t, k) => t + Math.max(0, (k.t1 ?? k.t0) - k.t0), 0)
+    const hooks = all.reduce((t, k) => t + k.children.filter(c => c.kind === 'hook').length, 0)
+    const bad = all.some(k => k.status === 'error' || k.status === 'denied')
+    const label = n.kind === 'text' ? 'Text' : n.kind === 'thinking' ? 'Thinking' : `${n.label}${more ? ` ×${more + 1}` : ''}`
+    html += `<div class="dbox k-${n.kind}${bad ? ' st-error' : ''}${dim(n) ? ' dim' : ''}${all.some(k => k.id === state.selected) ? ' sel' : ''}" style="left:${x(it.col) + 10}px;top:${top + 6}px;width:${DIAG.COL_W - 20}px;--c:${color(n)}" data-gid="${esc(n.id)}" title="${esc(oneLine(n.sub ?? '', 200))}">
+      <span class="ico">${icon(n)}</span><span class="dtxt"><b>${esc(oneLine(label, 34))}</b><small>${esc(oneLine(n.sub ?? '', 46))}</small></span>
+      ${n.kind === 'tool' || n.kind === 'skill' ? `<span class="dmeta">${dur ? esc(fmtMs(dur)) : ''}${hooks && kindShown({ kind: 'hook', data: {} }) ? `<i>${hooks}h</i>` : ''}</span>` : ''}
+    </div>`
+  }
+  const heads = lanes.map((l, i) => `<div class="dhead" style="left:${x(i)}px;width:${DIAG.COL_W}px" ${l.node ? `data-gid="${esc(l.node.id)}"` : ''}><span class="ico" style="--c:var(${l.agent ? '--c-agent' : '--c-turn'})"><svg viewBox="0 0 24 24">${ICONS[l.agent ? 'agent' : 'session']}</svg></span><span class="dtxt"><b>${esc(oneLine(l.label, 30))}</b><small>${esc(oneLine(l.sub, 36))}</small></span></div>`).join('')
+  inner.style.width = `${width}px`
+  inner.style.height = `${height}px`
+  inner.innerHTML = `<svg class="dsvg" width="${width}" height="${height}"><defs>
+      <marker id="dah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" fill="var(--c-agent)"/></marker>
+      <marker id="dah2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" fill="var(--c-ok)"/></marker>
+    </defs>${svg}</svg><div class="dheads" style="width:${width}px">${heads}</div>${html}${rows.length ? '' : '<div class="dim" style="position:absolute;top:80px;left:20px">Nothing to draw with these filters.</div>'}`
 }
 
 // Components: every subagent type, skill and hook across sessions, built from
@@ -1717,6 +1872,7 @@ function toggleHelp(show) {
       <section><h3>Views</h3>
         <p><b>Sessions → Tree</b>: turns, then what each agent did. A subagent is one row (its Agent call is merged into it); its own work hangs below.</p>
         <p><b>Sessions → Timeline</b> (<kbd>t</kbd>): one lane per agent. Thin bars are model requests, thick bars tool calls, striped bars subagents running. Idle gaps are folded (hatched). <kbd>⌘</kbd>+wheel zooms, drag to pan.</p>
+        <p><b>Sessions → Diagram</b>: a sequence diagram, one column per agent, events going down in the order they happened. Violet arrows launch a subagent; green arrows bring its result back. Runs of one tool fold into one box.</p>
         <p><b>Components</b>: your subagent types, skills and hooks across sessions: how often, where, launched by whom, and where they were offered but not used.</p>
       </section>
       <section><h3>Shapes and colours</h3>
@@ -1725,7 +1881,7 @@ function toggleHelp(show) {
           ${legend('bash', 'Tool call (square, colour = family)', 'lg-tool', '--c-bash')}
           ${legend('launch', 'Launch agent', 'lg-tool', '--c-agent')}
           ${legend('workflow', 'Workflow', 'lg-tool', '--c-workflow')}
-          ${legend('skill', 'Skill', 'lg-dot', '--c-skill')}
+          ${legend('skill', 'Skill (a tool family)', 'lg-tool', '--c-skill')}
           ${legend('hook', 'Hook', 'lg-dot', '--c-hook')}
           ${legend('text', 'Text', 'lg-dot', '--c-text')}
           ${legend('thinking', 'Thinking', 'lg-dot', '--c-thinking')}
@@ -1737,7 +1893,7 @@ function toggleHelp(show) {
         <p><b>Kinds</b>: click to hide, <kbd>⌥</kbd>-click to show only one. Hidden kinds never hide their children: those move up and say where they came from. <b>Tools ▾</b> filters by family and tool.</p>
       </section>
       <section><h3>Keys</h3>
-        <div class="keys"><kbd>↑</kbd><kbd>↓</kbd> / <kbd>j</kbd><kbd>k</kbd> move · <kbd>→</kbd><kbd>←</kbd> open, close · <kbd>Enter</kbd> toggle · <kbd>/</kbd> search · <kbd>e</kbd> next error · <kbd>f</kbd> follow live · <kbd>t</kbd> tree or timeline · <kbd>?</kbd> help</div>
+        <div class="keys"><kbd>↑</kbd><kbd>↓</kbd> / <kbd>j</kbd><kbd>k</kbd> move · <kbd>→</kbd><kbd>←</kbd> open, close · <kbd>Enter</kbd> toggle · <kbd>/</kbd> search · <kbd>e</kbd> next error · <kbd>f</kbd> follow live · <kbd>t</kbd> next view (tree, timeline, diagram) · <kbd>?</kbd> help</div>
       </section>
       <section class="wide"><h3>What it cannot see</h3>
         <p class="dim">Which hook command ran is inferred from your settings (Claude Code reports only the event); hooks of the Claude Desktop app are callbacks no settings file lists; some thinking arrives without text; skills preloaded into a subagent are not seen. The <b>health</b> badge in the header warns when a log looks incomplete, which usually means a Claude Code update changed something. Full list: docs/limitations.md.</p>

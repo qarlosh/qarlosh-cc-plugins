@@ -12,6 +12,8 @@ It has two parts:
 - **Viewer**: a local web page over those logs.
   - **Tree**: turns, then what each agent did, with subagents nested under whoever launched them.
   - **Timeline**: one lane per agent, to see what ran in parallel and where the time went.
+  - **Diagram**: a sequence diagram, a column per agent, with arrows where a subagent is launched
+    and where its result comes back.
   - **Components**: your subagent types, skills and hooks across sessions, with where they were
     offered but not used: is each used as you expect?
   - An inspector with every detail, presets, filters, search, keyboard navigation, live follow, a
@@ -47,7 +49,7 @@ Views: presets (Everything, Agents only, Hooks only, …), an agent scope (all, 
 agent), kinds of content and tool families to show or hide (⌥-click a kind to show only it).
 
 Viewer keys: `↑`/`↓` or `j`/`k` move, `→`/`←` open and close, `Enter` toggles, `/` searches,
-`e` jumps to the next error, `f` follows the newest activity, `t` switches tree and timeline, `?`
+`e` jumps to the next error, `f` follows the newest activity, `t` cycles tree, timeline and diagram, `?`
 opens the help.
 
 ## After updating Claude Code

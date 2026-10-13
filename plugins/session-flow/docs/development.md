@@ -13,7 +13,7 @@ and what is left to do. Read this first when picking the plugin up in a new sess
 | `hooks/hooks.json`, `hooks/register.ts` | The collector, a mod (function hooks). One `Collector` object holds the state; functions that use `$` live at the top level of the file (the validator requires it) |
 | `tests/no-interference.test.ts` | Engine tests: a tool call and a prompt pass through unchanged |
 | `viewer/server.py` | Local server (stdlib only): serves the page, lists logs, returns records from an offset, infers hook configuration (settings and plugins), reads the transcript for hook detail and the session's entrypoint |
-| `viewer/app.js` | The page, plain JS. `build()` turns records into the tree model (agents merged with their Agent calls); `computeVisible()` applies filters, scope and promotion; `drawGantt()` is the timeline; `loadComponents()`/`collect()` the components view; `health()` the log checks |
+| `viewer/app.js` | The page, plain JS. `build()` turns records into the tree model (agents merged with their Agent calls); `computeVisible()` applies filters, scope and promotion; `drawGantt()` is the timeline, `drawDiagram()` the sequence diagram (both take their lanes from `laneList()`, which applies the agent scope); `loadComponents()`/`collect()` the components view; `health()` the log checks |
 | `viewer/index.html`, `viewer/style.css` | Layout and theme (dark and light, colour per kind and tool family) |
 | `tools/hook-timings.py` | Per-event hook time from a `--debug` log: the collector's real cost |
 | `tools/selfcheck.py` | Regression check: a scripted `claude -p` session, then the log is checked record by record |
@@ -75,8 +75,8 @@ held then; if a check fails, start here.
 
 ## Status and what is left
 
-Done: event format, collector, web viewer (tree with agents as the backbone, timeline, components
-view, inspector, presets, agent scope, kinds and tool families, promotion of hidden kinds, hook
+Done: event format, collector, web viewer (tree with agents as the backbone, timeline, sequence
+diagram, components view, inspector, presets, agent scope, kinds and tool families, promotion of hidden kinds, hook
 inference, health checks, help), `/session-flow`, cost measurement, self-check.
 
 Left for later sessions, roughly in order of value:
@@ -88,8 +88,7 @@ Left for later sessions, roughly in order of value:
    checked by the components view, with the sessions that broke them.
 3. **Workflows**: agents launched by a workflow carry `agent.spawn.workflow { runId, agentIndex }`;
    group them under their run and show its phases (parallel, pipeline).
-4. **More views**: swimlanes (who launched whom, as a sequence diagram), flame graph of time or
-   tokens, files (who read or edited each file).
+4. **More views**: flame graph of time or tokens, files (who read or edited each file).
 5. **Smaller**: per-command hook detail if a later Claude Code exposes it; deduplicate the injected
    context repeated on every turn (log size); the components view reads every log in the browser,
    which will need a server-side index once there are hundreds of sessions.

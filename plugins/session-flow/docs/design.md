@@ -99,6 +99,9 @@ The agent is the only kind that nests without a fixed limit (agent → step → 
 ## Interaction
 
 - Presets: Everything, Agents only (the backbone), Hooks only, Tools only, Conversation, No context.
+- Kinds of content: Tools (skills are one of its families), Hooks, Text, Thinking, Context. The
+  same filters apply to every view of a session: the tree, the timeline (instant events such as
+  text and hooks as marks) and the diagram; search and "errors only" dim what does not match there.
 - Filters: kinds of content (⌥-click shows only one), tool families and tool names, agent scope,
   errors/denials only, duration above a threshold, empty thinking blocks, text search.
 - Navigation: breadcrumb (`main › reviewer › …`), jump to parent or to the spawning call, next
@@ -112,7 +115,7 @@ The agent is the only kind that nests without a fixed limit (agent → step → 
 | Tree with time bars | What happened, in what order (the navigation base) | Done |
 | Timeline (Gantt, one lane per agent, idle gaps folded) | What ran in parallel, where the waits were | Done |
 | Components | Per subagent type / skill / hook, across sessions: how often, where, triggered by what | Done |
-| Swimlanes | Who spawned whom, and when each answer came back | Later |
+| Diagram (sequence: a column per agent, launch and return arrows) | Who spawned whom, and when each answer came back | Done |
 | Flame graph / icicle | Where time or tokens went | Later |
 | Files | Who read or edited each file | Later |
 | Now strip | What is running at this moment | Later, with the Desktop pane |
@@ -131,7 +134,7 @@ encodes kind, subtle motion for live updates, dark mode.
 1. Event format ([events.md](events.md)). Done.
 2. Collector, no UI, writing the log. Done.
 3. Web viewer: tree, inspector, filters. Done, with presets, agent scope and tool families.
-4. Components view and the timeline. Done; health checks, help and `tools/selfcheck.py` added.
+4. Components view, timeline and diagram. Done; health checks, help and `tools/selfcheck.py` added.
 5. Desktop pane, expectations, workflows, the remaining views: see
    [development.md](development.md#status-and-what-is-left).
 
