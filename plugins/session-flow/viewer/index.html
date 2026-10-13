@@ -26,6 +26,7 @@
   <main class="main">
     <header class="top">
       <div class="title-row">
+        <button class="ghost side-toggle" title="Hide or show the sessions list ( [ )">☰</button>
         <div class="title-wrap">
           <h1 id="title">Pick a session</h1>
           <div id="subtitle" class="subtitle"></div>
@@ -62,8 +63,9 @@
     <section id="components" class="components">
       <div class="comp-head">
         <div>
-          <h1>Components</h1>
-          <div class="subtitle">Your subagents, skills and hooks across sessions: is each used as you expect?</div>
+          <button class="ghost side-toggle" title="Hide or show the sessions list ( [ )">☰</button>
+          <div><h1>Components</h1>
+          <div class="subtitle">Your subagents, skills and hooks across sessions: is each used as you expect?</div></div>
         </div>
         <div class="comp-ctrl">
           <input id="comp-q" class="search" type="search" placeholder="Filter components" autocomplete="off">
@@ -86,6 +88,7 @@
     </section>
   </main>
 
+  <div id="insp-resize" class="insp-resize" title="Drag to resize"></div>
   <aside id="inspector" class="inspector">
     <div class="insp-empty">Select a row to see everything about it.</div>
   </aside>

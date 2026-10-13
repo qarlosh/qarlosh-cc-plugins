@@ -15,6 +15,7 @@ and what is left to do. Read this first when picking the plugin up in a new sess
 | `viewer/server.py` | Local server (stdlib only): serves the page, lists logs, returns records from an offset, infers hook configuration (settings and plugins), reads the transcript for hook detail and the session's entrypoint |
 | `viewer/app.js` | The page, plain JS. `build()` turns records into the tree model (agents merged with their Agent calls); `computeVisible()` applies filters, scope and promotion; `drawGantt()` is the timeline, `drawDiagram()` the sequence diagram (both take their lanes from `laneList()`, which applies the agent scope); `loadComponents()`/`collect()` the components view; `health()` the log checks |
 | `viewer/index.html`, `viewer/style.css` | Layout and theme (dark and light, colour per kind and tool family) |
+| Viewer preferences | `savePrefs()`/`loadPrefs()` keep view, filters, sidebar and inspector width in `localStorage` (`session-flow-prefs`, per origin, so per port) |
 | `tools/hook-timings.py` | Per-event hook time from a `--debug` log: the collector's real cost |
 | `tools/selfcheck.py` | Regression check: a scripted `claude -p` session, then the log is checked record by record |
 

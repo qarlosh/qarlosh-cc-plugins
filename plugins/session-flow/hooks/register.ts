@@ -17,6 +17,7 @@ class Collector {
   readonly maxText: number
   readonly flushMs: number
   readonly logDirOption: string
+  readonly viewerPort: number
 
   sid: string | undefined
   logPath: string | undefined
@@ -37,6 +38,7 @@ class Collector {
     this.maxText = typeof options.maxTextChars === 'number' && options.maxTextChars > 0 ? options.maxTextChars : 20000
     this.flushMs = typeof options.flushMs === 'number' && options.flushMs >= 500 ? options.flushMs : 3000
     this.logDirOption = typeof options.logDir === 'string' ? options.logDir.trim() : ''
+    this.viewerPort = typeof options.viewerPort === 'number' && options.viewerPort > 0 ? Math.round(options.viewerPort) : 7777
   }
 
   now() {
@@ -204,7 +206,7 @@ async function startSession($: EngineInterface, c: Collector, e: { cwd: unknown;
 // After /clear the session has a new id: records from `fromSeq` on belong to it.
 // Starts the viewer (or reuses a running one) and opens it on this session.
 async function openViewer($: EngineInterface, c: Collector) {
-  const args = [`${$.plugin.root}/viewer/server.py`, '--open', c.sid ?? '']
+  const args = [`${$.plugin.root}/viewer/server.py`, '--port', String(c.viewerPort), '--open', c.sid ?? '']
   if (c.logDirOption) args.push('--log-dir', c.logDirOption)
   await $.process.run(['/bin/sh', '-c', 'nohup python3 "$@" >/dev/null 2>&1 &', 'sh', ...args], { timeoutMs: 10000 })
 }

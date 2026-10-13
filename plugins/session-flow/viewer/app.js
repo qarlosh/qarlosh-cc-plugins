@@ -721,6 +721,7 @@ function draw() {
 
 function refresh() {
   state.visible = computeVisible()
+  $('#empty').hidden = !!state.model
   if (state.view === 'gantt') drawGantt()
   else if (state.view === 'diagram') drawDiagram()
   else draw()
@@ -745,8 +746,10 @@ function usageKv(u) {
   ])
 }
 
-function inspect(n) {
+function inspect(n, keepScroll = false) {
   const el = $('#inspector')
+  const scroll = el.scrollTop
+  state.inspecting = 'node'
   if (!n) {
     el.innerHTML = '<div class="insp-empty">Select a row to see everything about it.</div>'
     return
@@ -845,7 +848,7 @@ function inspect(n) {
       break
   }
   el.innerHTML = html
-  el.scrollTop = 0
+  el.scrollTop = keepScroll ? scroll : 0
 }
 
 // What a tool call carries: input, permission, hooks, result, output.
@@ -930,6 +933,7 @@ function drawHealth() {
 }
 
 function inspectHealth() {
+  state.inspecting = 'health'
   const h = state.health ?? []
   $('#inspector').innerHTML = `<div class="insp-head"><div class="insp-title" style="--c:var(${h.some(x => x.level === 'warn') ? '--c-error' : '--c-ok'})"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></span><div><div class="kindtag">health</div><h2>Is this log complete?</h2></div></div></div>
     ${sec('Checks', h.length ? h.map(x => `<div class="hookcard" style="border-left-color:var(${x.level === 'warn' ? '--c-error' : '--c-web'})"><b style="color:var(${x.level === 'warn' ? '--c-error' : '--c-web'})">${esc(x.title)}</b><div class="dim">${esc(x.detail)}</div></div>`).join('') : '<div class="dim">Everything the collector should record is there.</div>')}
@@ -1045,7 +1049,7 @@ function rebuild() {
   fillScope()
   if (!$('#family-pop').hidden) fillFamilies()
   refresh()
-  if (state.selected) inspect(m.nodes.get(state.selected))
+  if (state.selected && state.inspecting === 'node') inspect(m.nodes.get(state.selected), true)
 }
 
 // Controls: presets, agent scope, kinds and tool families.
@@ -1071,12 +1075,54 @@ function applyPreset(key) {
   state.preset = key
   syncControls()
   refresh()
+  savePrefs()
 }
 
 function changed() {
   state.preset = 'custom'
   syncControls()
   refresh()
+  savePrefs()
+}
+
+// What the viewer remembers between visits, in this browser only.
+const PREFS_KEY = 'session-flow-prefs'
+
+function savePrefs() {
+  const f = state.filters
+  const app = document.querySelector('.app')
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({
+      view: state.view, mode: app.dataset.mode, preset: state.preset,
+      kinds: [...f.kinds], families: [...f.families], tools: [...f.tools],
+      steps: f.steps, emptyThinking: f.emptyThinking, minMs: f.minMs,
+      sideHidden: app.classList.contains('side-hidden'), inspW: app.style.getPropertyValue('--insp-w') || null, compDays: comp.days,
+    }))
+  } catch {}
+}
+
+function loadPrefs() {
+  let p
+  try {
+    p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? 'null')
+  } catch {}
+  if (!p) return {}
+  const f = state.filters
+  const known = new Set(KINDS.map(k => k.key))
+  if (Array.isArray(p.kinds)) f.kinds = new Set(p.kinds.filter(k => known.has(k)))
+  if (Array.isArray(p.families)) f.families = new Set(p.families)
+  if (Array.isArray(p.tools)) f.tools = new Set(p.tools)
+  if (typeof p.steps === 'boolean') f.steps = p.steps
+  if (typeof p.emptyThinking === 'boolean') f.emptyThinking = p.emptyThinking
+  if (typeof p.minMs === 'number') f.minMs = p.minMs
+  if (p.preset) state.preset = p.preset
+  if (p.compDays != null) comp.days = p.compDays
+  const app = document.querySelector('.app')
+  app.classList.toggle('side-hidden', !!p.sideHidden)
+  if (p.inspW) app.style.setProperty('--insp-w', p.inspW)
+  $('#mindur').value = String(f.minMs)
+  $('#comp-days').value = String(comp.days)
+  return p
 }
 
 function syncControls() {
@@ -1112,6 +1158,12 @@ function fillScope() {
   const sel = $('#scope')
   const agents = agentList()
   if (state.filters.scope !== 'all' && state.filters.scope !== 'main' && !state.model.nodes.has(state.filters.scope)) state.filters.scope = 'all'
+  const sig = agents.map(a => `${a.n.id}|${a.n.label}`).join('\n')
+  if (sel.dataset.sig === sig && sel.options.length) {
+    sel.value = state.filters.scope
+    return
+  }
+  sel.dataset.sig = sig
   sel.innerHTML = `<option value="all">All agents</option><option value="main">Main agent only</option>${
     agents.length ? `<optgroup label="One agent">${agents.map(a => `<option value="${esc(a.n.id)}">${'· '.repeat(a.depth)}${esc(oneLine(a.n.label, 50))}${a.n.data.spawn?.type ? ` (${esc(a.n.data.spawn.type)})` : ''}</option>`).join('')}</optgroup>` : ''
   }`
@@ -1313,9 +1365,31 @@ function wire() {
   $('#comp-q').addEventListener('input', drawComponents)
   $('#comp-days').addEventListener('change', e => {
     comp.days = +e.target.value
+    savePrefs()
     loadComponents()
   })
   $('#comp-reload').addEventListener('click', loadComponents)
+  for (const b of document.querySelectorAll('.side-toggle')) b.addEventListener('click', toggleSidebar)
+  const handle = $('#insp-resize')
+  handle.addEventListener('mousedown', e => {
+    e.preventDefault()
+    const app = document.querySelector('.app')
+    const move = ev => {
+      const w = Math.max(280, Math.min(window.innerWidth * 0.6, window.innerWidth - ev.clientX))
+      app.style.setProperty('--insp-w', `${Math.round(w)}px`)
+      if (state.view === 'gantt') drawGantt()
+    }
+    const up = () => {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', up)
+      document.body.classList.remove('resizing')
+      savePrefs()
+      refresh()
+    }
+    document.body.classList.add('resizing')
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+  })
   $('#health').addEventListener('click', inspectHealth)
   $('#help-btn').addEventListener('click', () => toggleHelp())
   $('#help').addEventListener('click', e => {
@@ -1326,7 +1400,7 @@ function wire() {
     if (c) inspectComponent(c.dataset.comp)
   })
 
-  $('#kinds').innerHTML = KINDS.map(k => `<span class="kind" data-k="${k.key}" style="--k:var(${k.color})" title="Click to show or hide · ⌥-click to show only this"><i></i>${k.label}${k.key === 'tool' ? '<b class="caret" title="Tool families">▾</b>' : ''}</span>`).join('')
+  $('#kinds').innerHTML = KINDS.map(k => `<span class="kind" data-k="${k.key}" style="--k:var(${k.color})" title="Click to show or hide · ⌥-click to show only this"><i></i>${k.label}${k.key === 'tool' ? '<b class="caret" title="Tool families and tools">▾</b>' : ''}</span>`).join('')
   $('#kinds').addEventListener('click', e => {
     const k = e.target.closest('.kind')
     if (!k) return
@@ -1371,7 +1445,7 @@ function wire() {
   })
   document.addEventListener('click', e => {
     const pop = $('#family-pop')
-    if (!pop.hidden && !pop.contains(e.target) && !e.target.closest('.caret')) pop.hidden = true
+    if (!pop.hidden && !e.composedPath().includes(pop) && !e.target.closest?.('.caret')) pop.hidden = true
   })
   $('#preset').innerHTML = Object.entries(PRESETS).map(([k, p]) => `<option value="${k}">${p.label}</option>`).join('') + '<option value="custom" disabled>Custom</option>'
   $('#preset').addEventListener('change', e => applyPreset(e.target.value))
@@ -1401,6 +1475,7 @@ function wire() {
   })
   $('#mindur').addEventListener('change', e => {
     state.filters.minMs = +e.target.value
+    savePrefs()
     refresh()
   })
   $('#expand-all').addEventListener('click', () => state.model && setAll(true))
@@ -1435,6 +1510,7 @@ function wire() {
       case '/': $('#q').focus(); break
       case '?': toggleHelp(); break
       case 'Escape': toggleHelp(false); break
+      case '[': toggleSidebar(); break
       case 't': setView({ tree: 'gantt', gantt: 'diagram', diagram: 'tree' }[state.view]); break
       case 'e': state.model && nextError(); break
       case 'f': setFollow(!state.follow); break
@@ -1457,6 +1533,7 @@ function setView(view) {
   $('#gantt').hidden = view !== 'gantt'
   $('#diagram').hidden = view !== 'diagram'
   refresh()
+  savePrefs()
 }
 
 // Lanes the scope allows: all agents, the main one, or one agent and those it launched.
@@ -1717,6 +1794,7 @@ const comp = { days: 30, data: null, cache: new Map(), loading: false, selected:
 function setMode(mode) {
   document.querySelector('.app').dataset.mode = mode
   for (const b of document.querySelectorAll('.mode')) b.classList.toggle('on', b.dataset.mode === mode)
+  savePrefs()
   if (mode === 'components') {
     inspect(null)
     if (!comp.data && !comp.loading) loadComponents()
@@ -1830,6 +1908,7 @@ function drawComponents() {
 }
 
 function inspectComponent(id) {
+  state.inspecting = 'component'
   comp.selected = id
   drawComponents()
   const [kind, ...rest] = id.split(':')
@@ -1893,12 +1972,18 @@ function toggleHelp(show) {
         <p><b>Kinds</b>: click to hide, <kbd>⌥</kbd>-click to show only one. Hidden kinds never hide their children: those move up and say where they came from. <b>Tools ▾</b> filters by family and tool.</p>
       </section>
       <section><h3>Keys</h3>
-        <div class="keys"><kbd>↑</kbd><kbd>↓</kbd> / <kbd>j</kbd><kbd>k</kbd> move · <kbd>→</kbd><kbd>←</kbd> open, close · <kbd>Enter</kbd> toggle · <kbd>/</kbd> search · <kbd>e</kbd> next error · <kbd>f</kbd> follow live · <kbd>t</kbd> next view (tree, timeline, diagram) · <kbd>?</kbd> help</div>
+        <div class="keys"><kbd>↑</kbd><kbd>↓</kbd> / <kbd>j</kbd><kbd>k</kbd> move · <kbd>→</kbd><kbd>←</kbd> open, close · <kbd>Enter</kbd> toggle · <kbd>/</kbd> search · <kbd>e</kbd> next error · <kbd>f</kbd> follow live · <kbd>t</kbd> next view (tree, timeline, diagram) · <kbd>[</kbd> hide or show the sessions list · <kbd>?</kbd> help</div>
       </section>
       <section class="wide"><h3>What it cannot see</h3>
         <p class="dim">Which hook command ran is inferred from your settings (Claude Code reports only the event); hooks of the Claude Desktop app are callbacks no settings file lists; some thinking arrives without text; skills preloaded into a subagent are not seen. The <b>health</b> badge in the header warns when a log looks incomplete, which usually means a Claude Code update changed something. Full list: docs/limitations.md.</p>
       </section>
     </div>`
+}
+
+function toggleSidebar() {
+  document.querySelector('.app').classList.toggle('side-hidden')
+  savePrefs()
+  requestAnimationFrame(refresh)
 }
 
 function setFollow(on) {
@@ -1914,11 +1999,14 @@ async function main() {
     else if (matchMedia('(prefers-color-scheme: light)').matches) document.documentElement.dataset.theme = 'light'
   } catch {}
   wire()
+  const prefs = loadPrefs()
   syncControls()
   await loadSessions()
   const [hashSid, hashNode] = location.hash.slice(1).split('~')
   const sid = hashSid || state.sessions[0]?.sid
+  if (prefs.view && prefs.view !== 'tree') setView(prefs.view)
   if (sid) await openSession(sid, hashNode)
+  if (prefs.mode === 'components' && !hashSid) setMode('components')
   state.timer = setInterval(async () => {
     await loadSessions()
     if (state.live || state.sessions.find(s => s.sid === state.sid)?.live) await poll()

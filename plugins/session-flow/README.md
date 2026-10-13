@@ -69,6 +69,10 @@ Set with `claude plugin configure session-flow` (or `/config`):
 | `logDir` | `~/.claude/flow` | Where logs are written |
 | `maxTextChars` | `20000` | Longer texts are cut to this length |
 | `flushMs` | `3000` | How often buffered records are written |
+| `viewerPort` | `7777` | Local port of the viewer that `/session-flow` opens |
+
+The viewer remembers, in your browser, the view, filters, preset, whether the sessions list is
+hidden (`[`) and the inspector's width (drag its left edge).
 
 ## Does it affect the session?
 

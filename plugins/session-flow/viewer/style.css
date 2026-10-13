@@ -104,10 +104,22 @@ button, input, select { font: inherit; color: inherit; }
 ::selection { background: var(--sel); }
 
 .app {
+  --side-w: 280px;
+  --insp-w: 400px;
+  position: relative;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 400px;
+  grid-template-columns: var(--side-w) minmax(0, 1fr) var(--insp-w);
   height: 100vh;
 }
+.app.side-hidden { --side-w: 0px; }
+.app.side-hidden .sidebar { visibility: hidden; overflow: hidden; border: 0; min-width: 0; }
+.insp-resize { position: absolute; top: 0; bottom: 0; right: calc(var(--insp-w) - 4px); width: 8px; z-index: 30; cursor: col-resize; }
+.insp-resize:hover, body.resizing .insp-resize { background: linear-gradient(90deg, transparent 3px, var(--sel-line) 3px, var(--sel-line) 5px, transparent 5px); }
+body.resizing { cursor: col-resize; user-select: none; }
+.side-toggle { flex: none; width: 30px; height: 30px; padding: 0; display: grid; place-items: center; font-size: 15px; margin-right: 10px; }
+.title-row, .comp-head > div:first-child { display: flex; align-items: flex-start; }
+.title-row { justify-content: flex-start; }
+.title-row .live-wrap { margin-left: auto; }
 
 /* Sidebar */
 
@@ -305,7 +317,7 @@ a.jump:hover { text-decoration: underline; }
 .dim { color: var(--muted); }
 
 @media (max-width: 1200px) {
-  .app { grid-template-columns: 240px minmax(0, 1fr) 360px; }
+  .app { --side-w: 240px; --insp-w: 360px; }
 }
 @media (max-width: 900px) {
   body { overflow: auto; }
@@ -322,7 +334,7 @@ a.jump:hover { text-decoration: underline; }
 .via { flex: none; font-size: 11px; color: var(--faint); padding: 1px 6px; border-radius: 6px; border: 1px dashed var(--line-strong); white-space: nowrap; max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
 .row.path { opacity: .55; }
 .row.path:hover, .row.path.sel { opacity: 1; }
-.kind .caret { margin-left: 2px; padding: 0 2px; border-radius: 4px; font-weight: 400; color: var(--muted); }
+.kind .caret { margin: -4px -6px -4px 2px; padding: 4px 8px; border-radius: 0 999px 999px 0; border-left: 1px solid var(--line-strong); font-weight: 400; font-size: 13px; line-height: 1; color: var(--muted); }
 .kind .caret:hover { background: var(--hover); color: var(--text); }
 .kind.partial i { box-shadow: 0 0 0 2px var(--panel-solid), 0 0 0 3px var(--k); }
 .pop {
@@ -391,7 +403,7 @@ a.jump:hover { text-decoration: underline; }
 .gantt-inner { position: relative; min-width: 100%; }
 .glane { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--line); }
 .glane:nth-child(even) { background: color-mix(in srgb, var(--hover) 60%, transparent); }
-.glabel { position: sticky; left: 0; z-index: 3; height: 100%; display: flex; align-items: center; gap: 8px; background: var(--panel-solid); border-right: 1px solid var(--line); cursor: pointer; }
+.glabel { position: sticky; left: 0; z-index: 8; height: 100%; display: flex; align-items: center; gap: 8px; background: var(--panel-solid); border-right: 1px solid var(--line); cursor: pointer; }
 .glabel .ico { width: 20px; height: 20px; border-radius: 50%; flex: none; }
 .gl-text { display: flex; flex-direction: column; min-width: 0; }
 .gl-text b, .gl-text small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

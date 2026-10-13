@@ -1,6 +1,6 @@
 {
   "name": "session-flow",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Records what a session does (subagents, tools, skills, hooks, texts) to a local log, to follow it live or review it later.",
   "author": {
     "name": "Carlos Herrero"
@@ -30,6 +30,12 @@
       "title": "Flush interval (ms)",
       "description": "How often buffered records are written to the log.",
       "default": 3000
+    },
+    "viewerPort": {
+      "type": "number",
+      "title": "Viewer port",
+      "description": "Local port of the web viewer that /session-flow opens.",
+      "default": 7777
     }
   }
 }
