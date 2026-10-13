@@ -9,8 +9,13 @@ It has two parts:
 
 - **Collector** (a mod): observes the session without changing it and appends one JSON record per
   event to `~/.claude/flow/<session-id>.jsonl`.
-- **Viewer**: a local web page over those logs. Session list, tree with per-turn timeline,
-  inspector with every detail, filters, search, keyboard navigation, live follow.
+- **Viewer**: a local web page over those logs.
+  - **Tree**: turns, then what each agent did, with subagents nested under whoever launched them.
+  - **Timeline**: one lane per agent, to see what ran in parallel and where the time went.
+  - **Components**: your subagent types, skills and hooks across sessions, with where they were
+    offered but not used: is each used as you expect?
+  - An inspector with every detail, presets, filters, search, keyboard navigation, live follow, a
+    health badge that warns when a log looks incomplete, and built-in help (`?`).
 
 ## Requirements
 
@@ -39,7 +44,15 @@ Views: presets (Everything, Agents only, Hooks only, …), an agent scope (all, 
 agent), kinds of content and tool families to show or hide (⌥-click a kind to show only it).
 
 Viewer keys: `↑`/`↓` or `j`/`k` move, `→`/`←` open and close, `Enter` toggles, `/` searches,
-`e` jumps to the next error, `f` follows the newest activity.
+`e` jumps to the next error, `f` follows the newest activity, `t` switches tree and timeline, `?`
+opens the help.
+
+## After updating Claude Code
+
+The collector relies on parts of Claude Code that may change between releases (see
+[development.md](docs/development.md#what-it-relies-on-that-is-not-documented)). After an update,
+run `python3 tools/selfcheck.py` in the plugin folder: a short scripted session whose log is checked
+record by record. The viewer's health badge flags the same problems on real sessions.
 
 ## Options
 
@@ -77,6 +90,8 @@ The viewer listens on localhost only and loads nothing from the network.
 - [events.md](docs/events.md): the log format.
 - [limitations.md](docs/limitations.md): what it cannot see, and why. Read this first if something
   looks missing.
+- [development.md](docs/development.md): code map, how to work on it and release it, what it
+  relies on that Claude Code does not document, and what is left to do.
 
 ## License
 

@@ -8,16 +8,17 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='8' cy='16' r='5' fill='%23a78bfa'/%3E%3Ccircle cx='24' cy='8' r='4' fill='%232dd4bf'/%3E%3Ccircle cx='24' cy='24' r='4' fill='%23fbbf24'/%3E%3Cpath d='M12 14 20 9M12 18l8 5' stroke='%23e6e9f2' stroke-width='2'/%3E%3C/svg%3E">
 </head>
 <body>
-<div class="app">
+<div class="app" data-mode="sessions">
   <aside class="sidebar">
     <div class="brand">
       <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="8" cy="16" r="5" class="b1"/><circle cx="24" cy="8" r="4" class="b2"/><circle cx="24" cy="24" r="4" class="b3"/><path d="M12 14 20 9M12 18l8 5"/></svg>
       <div><b>Session Flow</b><small>what your Claude sessions did</small></div>
     </div>
+    <div class="modes"><button class="mode on" data-mode="sessions">Sessions</button><button class="mode" data-mode="components">Components</button></div>
     <input id="session-search" class="search" type="search" placeholder="Filter sessions" autocomplete="off">
     <div id="sessions" class="sessions"></div>
     <div class="side-foot">
-      <button id="theme" class="ghost" title="Toggle theme">◐ Theme</button>
+      <span><button id="theme" class="ghost" title="Toggle theme">◐ Theme</button> <button id="help-btn" class="ghost" title="Help (?)">? Help</button></span>
       <span id="side-count"></span>
     </div>
   </aside>
@@ -30,6 +31,7 @@
           <div id="subtitle" class="subtitle"></div>
         </div>
         <div class="live-wrap">
+          <button id="health" class="health" hidden></button>
           <span id="live" class="live" hidden><i></i>live</span>
           <button id="follow" class="ghost toggle" title="Follow the newest activity (f)">Follow</button>
         </div>
@@ -57,8 +59,24 @@
       </div>
     </header>
 
+    <section id="components" class="components">
+      <div class="comp-head">
+        <div>
+          <h1>Components</h1>
+          <div class="subtitle">Your subagents, skills and hooks across sessions: is each used as you expect?</div>
+        </div>
+        <div class="comp-ctrl">
+          <input id="comp-q" class="search" type="search" placeholder="Filter components" autocomplete="off">
+          <select id="comp-days"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="0">All sessions</option></select>
+          <button id="comp-reload" class="ghost" title="Read the logs again">Reload</button>
+        </div>
+      </div>
+      <div id="comp-body" class="comp-body"></div>
+    </section>
+
     <section class="tree-wrap">
-      <div class="tree-head"><span>Flow</span><span class="tl-head">Timeline (per turn)</span></div>
+      <div class="tree-head"><span class="views"><button class="view on" data-view="tree">Tree</button><button class="view" data-view="gantt">Timeline</button></span><span class="tl-head">Bars: time within each turn</span></div>
+      <div id="gantt" class="gantt" hidden><div id="gantt-inner" class="gantt-inner"></div><div id="gtip" class="gtip" hidden></div></div>
       <div id="tree" class="tree" tabindex="0"><div id="spacer"></div><div id="rows"></div></div>
       <div id="empty" class="empty">
         <div class="orbit"><i></i><i></i><i></i></div>
@@ -72,6 +90,7 @@
   </aside>
 </div>
 <div id="family-pop" class="pop" hidden></div>
+<div id="help" class="help-wrap" hidden><div class="help" role="dialog" aria-label="Help"></div></div>
 <script src="app.js"></script>
 </body>
 </html>

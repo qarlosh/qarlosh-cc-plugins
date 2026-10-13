@@ -58,6 +58,7 @@ const state = {
   visible: [],
   follow: false,
   live: false,
+  view: 'tree',
   filters: { kinds: new Set(KINDS.map(k => k.key)), q: '', errors: false, steps: true, minMs: 0, emptyThinking: false, families: new Set(), tools: new Set(), scope: 'all' },
   preset: 'everything',
   timer: null,
@@ -188,7 +189,7 @@ function build(records, hooks, hookConf = []) {
     turn: null, turnN: 0, steps: new Map(), agents: new Map(), tools: new Map(), running: new Map(), lastEnded: new Map(), hookIdx: new Map(),
     pendingPrompt: null, pendingCtx: [], pendingSkill: [], ctxGroups: new Map(),
     info: { reloads: 0 }, offers: { skills: [], agents: [] }, collector: { ms: 0, events: 0, errors: [] },
-    first: null, last: null,
+    first: null, last: null, kinds: {}, toolUses: [],
   }
 
   const agentNode = a => {
@@ -227,6 +228,8 @@ function build(records, hooks, hookConf = []) {
       S.first = S.first ? Math.min(S.first, r.ts) : r.ts
       S.last = S.last ? Math.max(S.last, r.ts) : r.ts
     }
+    if (r.kind !== 'collector.stats') S.kinds[r.kind] = (S.kinds[r.kind] ?? 0) + 1
+    if (r.kind === 'row' && r.type === 'assistant') for (const b of r.blocks ?? []) if (b.type === 'tool_use') S.toolUses.push(b.name)
     switch (r.kind) {
       case 'session.start':
         if (S.info.start) S.info.reloads++
@@ -237,6 +240,7 @@ function build(records, hooks, hookConf = []) {
       case 'offer.skills': S.offers.skills = r.skills ?? []; break
       case 'offer.agent': S.offers.agents.push(r); break
       case 'collector.stats':
+        S.kinds[r.kind] = (S.kinds[r.kind] ?? 0) + 1
         for (const v of Object.values(r.ownMs ?? {})) S.collector.ms += v
         for (const v of Object.values(r.events ?? {})) S.collector.events += v
         S.collector.errors.push(...(r.errors ?? []))
@@ -881,6 +885,53 @@ function hookCard(n) {
   ])}${det.stdout ? `<div style="margin-top:6px">${pre(det.stdout)}</div>` : ''}${det.stderr ? `<div style="margin-top:6px">${pre(det.stderr)}</div>` : ''}${det.content ? `<div style="margin-top:6px">${pre(det.content)}</div>` : ''}</div>`
 }
 
+// Health: signs that the collector no longer sees what it used to, usually
+// after a Claude Code update changed an event (docs/development.md).
+
+const KNOWN_KINDS = new Set(['session.start', 'session.info', 'session.end', 'offer.skills', 'offer.agent', 'collector.stats', 'prompt', 'turn.start', 'turn.end', 'step.start', 'step.end', 'row', 'tool.start', 'tool.end', 'permission', 'agent.spawn', 'skill.load', 'skill.expand', 'hook'])
+
+function health(m) {
+  const k = m.S.kinds
+  const out = []
+  const uses = m.S.toolUses
+  const warn = (title, detail) => out.push({ level: 'warn', title, detail })
+  const info = (title, detail) => out.push({ level: 'info', title, detail })
+  if (uses.length && !k['tool.start']) warn('No tool calls recorded', `The model asked for ${uses.length} tool calls, but no tool.start records exist: the tool.call event may have changed.`)
+  else if (uses.length > (k['tool.start'] ?? 0) * 1.5 + 2) warn('Fewer tool calls than asked', `${uses.length} tool_use blocks, ${k['tool.start'] ?? 0} tool.start records.`)
+  const agentCalls = uses.filter(n => n === 'Agent' || n === 'Task').length
+  if (agentCalls && !k['agent.spawn']) warn('Subagents not linked', `${agentCalls} Agent calls but no agent.spawn records: the agent tree cannot be built.`)
+  if (k['step.start'] && !k['step.end']) warn('Model requests never end', 'step.start without step.end: the turn.step stream may have changed.')
+  const steps = [...m.nodes.values()].filter(n => n.kind === 'step')
+  if (steps.length > 2 && steps.every(n => !n.data.end?.usage)) warn('No token usage', 'No step.end carries usage.')
+  if (k.prompt && !k['turn.start']) warn('No turns', 'Prompts were recorded but no turn.start.')
+  if (!k['session.info']) info('Transcript not found', 'Hook detail and the host-app check need the transcript path.')
+  const unknown = Object.keys(k).filter(x => !KNOWN_KINDS.has(x))
+  if (unknown.length) info('Unknown record kinds', `${unknown.join(', ')}: written by a newer collector than this viewer.`)
+  const other = [...new Set([...m.nodes.values()].filter(n => n.kind === 'tool' && n.family === 'tool').map(n => n.data.toolName))]
+  if (other.length) info('Tools without a family', `${other.join(', ')}: shown as Other (add them to FAMILIES in app.js).`)
+  if (m.S.collector.errors.length) warn('Collector errors', [...new Set(m.S.collector.errors)].slice(0, 5).join(' · '))
+  return out
+}
+
+function drawHealth() {
+  const h = health(state.model)
+  const warns = h.filter(x => x.level === 'warn').length
+  const btn = $('#health')
+  btn.hidden = false
+  btn.className = `health ${warns ? 'bad' : h.length ? 'meh' : 'ok'}`
+  btn.textContent = warns ? `⚠ ${warns} check${warns > 1 ? 's' : ''}` : h.length ? `ⓘ ${h.length} note${h.length > 1 ? 's' : ''}` : '✓ healthy'
+  btn.title = 'Does the log look complete? Click for details'
+  state.health = h
+}
+
+function inspectHealth() {
+  const h = state.health ?? []
+  $('#inspector').innerHTML = `<div class="insp-head"><div class="insp-title" style="--c:var(${h.some(x => x.level === 'warn') ? '--c-error' : '--c-ok'})"><span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></span><div><div class="kindtag">health</div><h2>Is this log complete?</h2></div></div></div>
+    ${sec('Checks', h.length ? h.map(x => `<div class="hookcard" style="border-left-color:var(${x.level === 'warn' ? '--c-error' : '--c-web'})"><b style="color:var(${x.level === 'warn' ? '--c-error' : '--c-web'})">${esc(x.title)}</b><div class="dim">${esc(x.detail)}</div></div>`).join('') : '<div class="dim">Everything the collector should record is there.</div>')}
+    ${sec('Record kinds', kv(Object.entries(state.model.S.kinds).sort((a, b) => b[1] - a[1]).map(([k, v]) => [k, String(v)])))}
+    ${sec('After a Claude Code update', '<div class="dim">Run <code>python3 tools/selfcheck.py</code> in the plugin folder: it runs a scripted session and checks the log. See docs/development.md.</div>')}`
+}
+
 function sessionStats() {
   const m = state.model
   const el = $('#stats')
@@ -928,8 +979,9 @@ function drawSessions() {
   $('#side-count').textContent = `${list.length} sessions`
 }
 
-async function openSession(sid) {
+async function openSession(sid, nodeId) {
   if (!sid) return
+  setMode('sessions')
   state.sid = sid
   state.records = []
   state.offset = 0
@@ -943,6 +995,7 @@ async function openSession(sid) {
   inspect(null)
   $('#tree').scrollTop = 0
   await poll(true)
+  if (nodeId && state.model?.nodes.has(nodeId)) select(nodeId, true)
 }
 
 async function poll(first = false) {
@@ -983,6 +1036,8 @@ function rebuild() {
   $('#subtitle').textContent = [start?.cwd, state.sid].filter(Boolean).join('  ·  ')
   $('#live').hidden = !state.live
   sessionStats()
+  drawHealth()
+  if (state.view === 'gantt') drawGantt()
   fillScope()
   if (!$('#family-pop').hidden) fillFamilies()
   refresh()
@@ -1195,6 +1250,71 @@ function wire() {
     if (s) openSession(s.dataset.sid)
   })
   $('#session-search').addEventListener('input', drawSessions)
+  for (const b of document.querySelectorAll('.mode')) b.addEventListener('click', () => setMode(b.dataset.mode))
+  for (const b of document.querySelectorAll('.view')) b.addEventListener('click', () => setView(b.dataset.view))
+  const gantt = $('#gantt')
+  gantt.addEventListener('click', e => {
+    const g = e.target.closest('[data-gid]')
+    if (!g) return
+    select(g.dataset.gid)
+    drawGantt()
+  })
+  gantt.addEventListener('wheel', e => {
+    if (!(e.ctrlKey || e.metaKey)) return
+    e.preventDefault()
+    const rect = gantt.getBoundingClientRect()
+    const mx = e.clientX - rect.left + gantt.scrollLeft - GANTT.LABEL_W
+    const old = GANTT.zoom
+    GANTT.zoom = Math.max(1, Math.min(200, GANTT.zoom * (e.deltaY < 0 ? 1.25 : 0.8)))
+    drawGantt()
+    gantt.scrollLeft = Math.max(0, mx * (GANTT.zoom / old) - (e.clientX - rect.left - GANTT.LABEL_W))
+  }, { passive: false })
+  let drag = null
+  gantt.addEventListener('mousedown', e => {
+    if (e.target.closest('[data-gid]')) return
+    drag = { x: e.clientX, y: e.clientY, l: gantt.scrollLeft, t: gantt.scrollTop }
+    gantt.classList.add('dragging')
+  })
+  window.addEventListener('mousemove', e => {
+    const tip = $('#gtip')
+    if (drag) {
+      gantt.scrollLeft = drag.l - (e.clientX - drag.x)
+      gantt.scrollTop = drag.t - (e.clientY - drag.y)
+      return
+    }
+    const g = e.target.closest?.('#gantt .gbar')
+    if (!g) {
+      tip.hidden = true
+      return
+    }
+    const n = state.model?.nodes.get(g.dataset.gid)
+    if (!n) return
+    const end = n.t1 ?? (n.status === 'running' ? state.model.S.last : n.t0)
+    tip.innerHTML = `<b>${esc(n.label)}</b>${n.sub ? `<span>${esc(oneLine(n.sub, 90))}</span>` : ''}<em>${esc(fmtMs(end - n.t0))} · ${esc(fmtClock(n.t0))}${n.status !== 'ok' ? ` · ${esc(n.status)}` : ''}</em>`
+    tip.hidden = false
+    const r = gantt.getBoundingClientRect()
+    tip.style.left = `${gantt.scrollLeft + Math.min(e.clientX - r.left + 14, r.width - 290)}px`
+    tip.style.top = `${gantt.scrollTop + Math.min(e.clientY - r.top + 14, r.height - 90)}px`
+  })
+  window.addEventListener('mouseup', () => {
+    drag = null
+    gantt.classList.remove('dragging')
+  })
+  $('#comp-q').addEventListener('input', drawComponents)
+  $('#comp-days').addEventListener('change', e => {
+    comp.days = +e.target.value
+    loadComponents()
+  })
+  $('#comp-reload').addEventListener('click', loadComponents)
+  $('#health').addEventListener('click', inspectHealth)
+  $('#help-btn').addEventListener('click', () => toggleHelp())
+  $('#help').addEventListener('click', e => {
+    if (e.target.id === 'help' || e.target.closest('[data-close]')) toggleHelp(false)
+  })
+  $('#comp-body').addEventListener('click', e => {
+    const c = e.target.closest('[data-comp]')
+    if (c) inspectComponent(c.dataset.comp)
+  })
 
   $('#kinds').innerHTML = KINDS.map(k => `<span class="kind" data-k="${k.key}" style="--k:var(${k.color})" title="Click to show or hide · ⌥-click to show only this"><i></i>${k.label}${k.key === 'tool' ? '<b class="caret" title="Tool families">▾</b>' : ''}</span>`).join('')
   $('#kinds').addEventListener('click', e => {
@@ -1303,12 +1423,326 @@ function wire() {
         break
       case 'Enter': case ' ': if (r?.open != null) toggle(r.n, !r.open); break
       case '/': $('#q').focus(); break
+      case '?': toggleHelp(); break
+      case 'Escape': toggleHelp(false); break
+      case 't': setView(state.view === 'tree' ? 'gantt' : 'tree'); break
       case 'e': state.model && nextError(); break
       case 'f': setFollow(!state.follow); break
       default: return
     }
     e.preventDefault()
   })
+}
+
+// Timeline: one lane per agent (nested by who launched whom), model requests
+// on a thin top track and tool calls below, stacked when they overlap. Idle
+// gaps longer than GAP_MS are folded into a narrow break so long sessions fit.
+
+const GANTT = { zoom: 1, GAP_MS: 20000, BREAK_PX: 34, LABEL_W: 240, MODEL_H: 8, TOOL_H: 14 }
+
+function setView(view) {
+  state.view = view
+  for (const b of document.querySelectorAll('.view')) b.classList.toggle('on', b.dataset.view === view)
+  $('#tree').hidden = view !== 'tree'
+  $('#gantt').hidden = view !== 'gantt'
+  if (view === 'gantt') drawGantt()
+  else draw()
+}
+
+function laneOf(n) {
+  for (let p = n.parent; p; p = p.parent) if (p.kind === 'agent') return p.agent
+  return null
+}
+
+function drawGantt() {
+  const m = state.model
+  const inner = $('#gantt-inner')
+  if (!m) {
+    inner.innerHTML = ''
+    return
+  }
+  const lanes = [{ agent: null, label: 'Main agent', sub: m.root.children.find(t => t.kind === 'turn')?.children.find(c => c.kind === 'step')?.data.start?.model ?? '', depth: 0 }]
+  for (const a of agentList()) lanes.push({ agent: a.n.agent, label: a.n.label, sub: [a.n.data.spawn?.type, a.n.data.spawn?.model].filter(Boolean).join(' · '), depth: a.depth + 1, node: a.n })
+  const laneIdx = new Map(lanes.map((l, i) => [l.agent, i]))
+  const bars = []
+  for (const n of m.nodes.values()) {
+    if (n.mergedInto || n.t0 == null || n.kind === 'group') continue
+    const end = n.t1 ?? (n.status === 'running' ? m.S.last : n.t0)
+    if (n.kind === 'step') bars.push({ n, lane: laneIdx.get(n.agent ?? null) ?? 0, track: 'model', t0: n.t0, t1: end })
+    else if (n.kind === 'tool' && kindShown(n)) bars.push({ n, lane: laneIdx.get(n.agent ?? null) ?? 0, track: 'tool', t0: n.t0, t1: end })
+    else if (n.kind === 'agent') bars.push({ n, lane: laneIdx.get(laneOf(n)) ?? 0, track: 'tool', t0: n.t0, t1: n.t1 ?? n.tEnd ?? n.t0 })
+  }
+  if (!bars.length) {
+    inner.innerHTML = '<div class="dim" style="padding:30px">Nothing timed in this session yet.</div>'
+    return
+  }
+  // Fold idle gaps.
+  const spans = bars.map(b => [b.t0, Math.max(b.t1, b.t0 + 1)]).sort((a, b) => a[0] - b[0])
+  const segs = []
+  for (const [a, b] of spans) {
+    const last = segs.at(-1)
+    if (last && a - last.b <= GANTT.GAP_MS) last.b = Math.max(last.b, b)
+    else segs.push({ a, b })
+  }
+  const active = segs.reduce((t, s) => t + (s.b - s.a), 0)
+  const width = Math.max(400, ($('#gantt').clientWidth - GANTT.LABEL_W - 30) * GANTT.zoom)
+  const pxPerMs = Math.max(1e-6, (width - GANTT.BREAK_PX * (segs.length - 1)) / Math.max(active, 1))
+  let x = 0
+  for (const s of segs) {
+    s.x0 = x
+    x += (s.b - s.a) * pxPerMs + GANTT.BREAK_PX
+  }
+  const total = x - GANTT.BREAK_PX
+  const X = t => {
+    let s = segs[0]
+    for (const g of segs) if (g.a <= t) s = g
+    return s.x0 + Math.max(0, Math.min(t, s.b) - s.a) * pxPerMs
+  }
+  // Stack overlapping tool bars inside each lane.
+  const rowsOf = lanes.map(() => [])
+  for (const b of bars.filter(b => b.track === 'tool').sort((p, q) => p.t0 - q.t0)) {
+    const rows = rowsOf[b.lane]
+    let r = rows.findIndex(end => end <= b.t0)
+    if (r < 0) r = rows.push(0) - 1
+    rows[r] = b.t1
+    b.row = r
+  }
+  let y = 30
+  for (const [i, l] of lanes.entries()) {
+    l.y = y
+    l.h = 10 + GANTT.MODEL_H + 6 + Math.max(1, rowsOf[i].length) * (GANTT.TOOL_H + 3) + 8
+    y += l.h
+  }
+  // Axis ticks inside each active segment, relative to the session's first activity.
+  const t0 = segs[0].a
+  const step = [1e3, 2e3, 5e3, 1e4, 3e4, 6e4, 12e4, 3e5, 6e5, 18e5, 36e5].find(s => s * pxPerMs >= 70) ?? 36e5
+  const clock = ms => {
+    const t = Math.round(ms / 1000)
+    const hh = Math.floor(t / 3600)
+    const mm = String(Math.floor((t % 3600) / 60)).padStart(hh ? 2 : 1, '0')
+    const ss = String(t % 60).padStart(2, '0')
+    return hh ? `${hh}:${mm}:${ss}` : `${mm}:${ss}`
+  }
+  let axis = ''
+  for (const s of segs) {
+    for (let t = Math.ceil((s.a - t0) / step) * step + t0; t <= s.b; t += step) axis += `<span class="tick" style="left:${X(t)}px">${clock(t - t0)}</span>`
+  }
+  const breaks = segs.slice(1).map((s, i) => `<span class="gbreak" style="left:${s.x0 - GANTT.BREAK_PX}px;width:${GANTT.BREAK_PX}px;height:${y}px" title="${esc(fmtMs(s.a - segs[i].b))} idle"><b>${esc(fmtMs(s.a - segs[i].b))}</b></span>`).join('')
+  const turnNodes = m.root.children.filter(t => t.kind === 'turn' && t.t0 != null)
+  const turns = turnNodes.map((t, i) => {
+    const room = (i + 1 < turnNodes.length ? X(turnNodes[i + 1].t0) : total) - X(t.t0) - 8
+    return `<span class="gturn" style="left:${X(t.t0)}px;height:${y}px" data-gid="${esc(t.id)}" title="${esc(t.label)}">${room > 30 ? `<b style="max-width:${Math.min(room, 260)}px">${esc(oneLine(t.label, 60))}</b>` : ''}</span>`
+  }).join('')
+  const barHtml = bars.map(b => {
+    const l = lanes[b.lane]
+    const left = X(b.t0)
+    const w = Math.max(2, X(b.t1) - left)
+    const top = b.track === 'model' ? l.y + 10 : l.y + 10 + GANTT.MODEL_H + 6 + b.row * (GANTT.TOOL_H + 3)
+    const h = b.track === 'model' ? GANTT.MODEL_H : GANTT.TOOL_H
+    const cls = ['gbar', `g-${b.n.kind}`, `st-${b.n.status}`, b.n.id === state.selected ? 'sel' : ''].join(' ')
+    const label = w > 60 && b.track === 'tool' ? `<span>${esc(oneLine(b.n.label + (b.n.sub ? ` · ${b.n.sub}` : ''), Math.floor(w / 6.5)))}</span>` : ''
+    return `<i class="${cls}" data-gid="${esc(b.n.id)}" style="left:${left}px;top:${top}px;width:${w}px;height:${h}px;--c:${color(b.n)}">${label}</i>`
+  }).join('')
+  const laneHtml = lanes.map(l => `<div class="glane" style="top:${l.y}px;height:${l.h}px">
+      <div class="glabel" style="width:${GANTT.LABEL_W}px;padding-left:${10 + l.depth * 14}px" ${l.node ? `data-gid="${esc(l.node.id)}"` : ''}>
+        <span class="ico" style="--c:var(${l.agent ? '--c-agent' : '--c-turn'})"><svg viewBox="0 0 24 24">${ICONS[l.agent ? 'agent' : 'session']}</svg></span>
+        <span class="gl-text"><b>${esc(oneLine(l.label, 40))}</b><small>${esc(l.sub)}</small></span>
+      </div>
+    </div>`).join('')
+  inner.style.height = `${y + 20}px`
+  inner.innerHTML = `${laneHtml}<div class="gplot" style="left:${GANTT.LABEL_W}px;width:${total + 20}px;height:${y}px"><div class="gaxis">${axis}</div>${breaks}${turns}${barHtml}</div>`
+  inner.style.width = `${GANTT.LABEL_W + total + 40}px`
+}
+
+// Components: every subagent type, skill and hook across sessions, built from
+// the same model as the tree.
+
+const comp = { days: 30, data: null, cache: new Map(), loading: false, selected: null }
+
+function setMode(mode) {
+  document.querySelector('.app').dataset.mode = mode
+  for (const b of document.querySelectorAll('.mode')) b.classList.toggle('on', b.dataset.mode === mode)
+  if (mode === 'components') {
+    inspect(null)
+    if (!comp.data && !comp.loading) loadComponents()
+    else drawComponents()
+  }
+}
+
+async function loadComponents() {
+  comp.loading = true
+  const since = comp.days ? Date.now() - comp.days * 86400000 : 0
+  const list = state.sessions.filter(s => (s.endedAt ?? s.startedAt ?? 0) >= since)
+  const agg = { agents: new Map(), skills: new Map(), hooks: new Map(), sessions: list.length }
+  let done = 0
+  for (const s of list) {
+    $('#comp-body').innerHTML = `<div class="comp-loading"><div class="orbit"><i></i><i></i><i></i></div>Reading ${++done} of ${list.length} sessions…</div>`
+    let c = comp.cache.get(s.sid)
+    if (!c || c.size !== s.size) {
+      try {
+        const [r, h] = await Promise.all([fetch(`api/session/${s.sid}/records?offset=0`), fetch(`api/session/${s.sid}/hookconfig`)])
+        const recs = (await r.json()).records ?? []
+        const conf = await h.json()
+        c = { size: s.size, model: build(recs, {}, Array.isArray(conf) ? conf : []) }
+        comp.cache.set(s.sid, c)
+      } catch {
+        continue
+      }
+    }
+    collect(agg, s, c.model)
+  }
+  comp.data = agg
+  comp.loading = false
+  drawComponents()
+}
+
+function collect(agg, s, model) {
+  const entry = (map, key, init = {}) => {
+    let e = map.get(key)
+    if (!e) map.set(key, (e = { key, uses: [], listed: new Set(), sessions: new Set(), repos: new Set(), ...init }))
+    return e
+  }
+  const repo = base(s.cwd)
+  const turnOf = n => {
+    let p = n
+    while (p && p.kind !== 'turn') p = p.parent
+    return p
+  }
+  const launcher = n => {
+    for (let p = n.parent; p; p = p.parent) if (p.kind === 'agent') return p.data.spawn?.type ?? p.label
+    return 'main'
+  }
+  for (const sk of model.S.offers.skills) entry(agg.skills, sk.name, { source: sk.source, plugin: sk.plugin }).listed.add(s.sid)
+  for (const n of model.nodes.values()) {
+    if (n.kind === 'context' && n.label === 'agent_listing_delta') {
+      for (const m of String(n.data.text ?? '').matchAll(/^- (\S+?): /gm)) entry(agg.agents, m[1]).listed.add(s.sid)
+    }
+  }
+  const use = (e, n, extra) => {
+    const turn = turnOf(n)
+    e.uses.push({ sid: s.sid, title: s.title, repo, ts: n.t0, nodeId: n.id, prompt: turn?.data.prompt?.text ?? turn?.label, ...extra })
+    e.sessions.add(s.sid)
+    if (repo) e.repos.add(repo)
+  }
+  for (const n of model.nodes.values()) {
+    if (n.mergedInto) continue
+    if (n.kind === 'agent') {
+      const sp = n.data.spawn ?? {}
+      use(entry(agg.agents, sp.type || 'unknown'), n, { label: n.label, model: sp.model, background: sp.background, ms: (n.t1 ?? n.tEnd) - n.t0, out: n.tot.out, by: launcher(n), status: n.status })
+    } else if ((n.kind === 'tool' && n.data.skill) || (n.kind === 'skill' && n.data.skill?.skill)) {
+      const sk = n.data.skill
+      use(entry(agg.skills, sk.skill), n, { via: sk.via, args: sk.args, by: launcher(n), status: n.status })
+    } else if (n.kind === 'hook' && n.data.hookEvent) {
+      const pick = n.data.pick
+      const key = `${n.data.hookEvent}|${pick?.command ?? n.data.detail?.command ?? '?'}`
+      const e = entry(agg.hooks, key, { label: n.label, event: n.data.hookEvent, command: pick?.command ?? n.data.detail?.command, source: pick?.source ?? (n.data.detail ? 'transcript' : 'not in settings'), host: !!pick?.host, tools: new Map() })
+      const tool = n.parent?.kind === 'tool' ? n.parent.data.toolName : n.parent?.kind === 'agent' ? 'Agent' : null
+      if (tool) e.tools.set(tool, (e.tools.get(tool) ?? 0) + 1)
+      use(e, n, { tool, inferred: !!pick && !n.data.detail, candidates: n.data.cands?.length ?? 0 })
+    }
+  }
+}
+
+function drawComponents() {
+  const d = comp.data
+  const el = $('#comp-body')
+  if (!d) return
+  const q = $('#comp-q').value.trim().toLowerCase()
+  const keep = e => !q || `${e.key} ${e.label ?? ''} ${e.command ?? ''}`.toLowerCase().includes(q)
+  const max = Math.max(1, ...[...d.agents.values(), ...d.skills.values(), ...d.hooks.values()].map(e => e.uses.length))
+  const card = (kind, e, title, sub, badges) => {
+    const unused = !e.uses.length
+    const last = Math.max(...e.uses.map(u => u.ts ?? 0), 0)
+    return `<div class="comp${unused ? ' unused' : ''}${comp.selected === `${kind}:${e.key}` ? ' sel' : ''}" data-comp="${esc(`${kind}:${e.key}`)}">
+      <span class="ico" style="--c:var(${kind === 'agents' ? '--c-agent' : kind === 'skills' ? '--c-skill' : '--c-hook'})"><svg viewBox="0 0 24 24">${ICONS[kind === 'agents' ? 'agent' : kind === 'skills' ? 'skill' : 'hook']}</svg></span>
+      <span class="comp-name"><b>${esc(title)}</b><small>${esc(sub)}</small></span>
+      <span class="comp-badges">${badges}</span>
+      <span class="comp-bar"><i style="width:${(e.uses.length / max) * 100}%"></i></span>
+      <span class="comp-num">${e.uses.length}</span>
+      <span class="comp-last">${unused ? 'never' : esc(fmtAgo(last))}</span>
+    </div>`
+  }
+  const sort = m => [...m.values()].filter(keep).sort((a, b) => b.uses.length - a.uses.length || a.key.localeCompare(b.key))
+  const listedBadge = e => (e.listed.size ? `<span class="badge${e.uses.length ? '' : ' warn'}" title="Sessions where it was offered to the model">used in ${e.sessions.size} of ${Math.max(e.listed.size, e.sessions.size)} sessions</span>` : `<span class="badge">${e.sessions.size} sessions</span>`)
+  const agents = sort(d.agents)
+  const skills = sort(d.skills)
+  const hooks = sort(d.hooks)
+  const section = (title, hint, rows) => `<div class="comp-sec"><h2>${esc(title)} <small>${esc(hint)}</small></h2>${rows || '<div class="dim">Nothing in these sessions.</div>'}</div>`
+  el.innerHTML = `<div class="comp-sum">${d.sessions} sessions read · ${d.agents.size} agent types · ${d.skills.size} skills · ${d.hooks.size} hooks</div>` +
+    section('Subagents', 'by type · runs', agents.map(e => card('agents', e, e.key, [...new Set(e.uses.map(u => u.model).filter(Boolean))].join(', ') || 'offered, never run', `${listedBadge(e)}${e.repos.size ? `<span class="badge">${e.repos.size} repo${e.repos.size > 1 ? 's' : ''}</span>` : ''}`)).join('')) +
+    section('Skills', 'loads', skills.map(e => card('skills', e, e.key, e.plugin ? `plugin ${e.plugin}` : e.source ?? '', `${listedBadge(e)}${e.uses.some(u => u.via === 'command') ? '<span class="badge">typed</span>' : ''}`)).join('')) +
+    section('Hooks', 'inferred runs', hooks.map(e => card('hooks', e, e.label, `${e.event} · ${e.source}`, `<span class="badge">${e.sessions.size} sessions</span>${e.tools.size ? `<span class="badge" title="Tools it ran around">${[...e.tools].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t]) => esc(t)).join(', ')}</span>` : ''}`)).join(''))
+}
+
+function inspectComponent(id) {
+  comp.selected = id
+  drawComponents()
+  const [kind, ...rest] = id.split(':')
+  const key = rest.join(':')
+  const e = comp.data?.[kind]?.get(key)
+  const el = $('#inspector')
+  if (!e) return
+  const title = kind === 'hooks' ? e.label : e.key
+  const color = kind === 'agents' ? '--c-agent' : kind === 'skills' ? '--c-skill' : '--c-hook'
+  const icon = ICONS[kind === 'agents' ? 'agent' : kind === 'skills' ? 'skill' : 'hook']
+  const uses = [...e.uses].sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0))
+  let html = `<div class="insp-head"><div class="insp-title" style="--c:var(${color})"><span class="ico"><svg viewBox="0 0 24 24">${icon}</svg></span><div><div class="kindtag">${esc(kind.slice(0, -1))}</div><h2>${esc(title)}</h2></div></div>
+    <div class="badges"><span class="badge">${e.uses.length} uses</span><span class="badge">${e.sessions.size} sessions</span>${e.listed.size ? `<span class="badge">offered in ${e.listed.size}</span>` : ''}</div></div>`
+  const stats = [['Repos', esc([...e.repos].join(', ')) || null]]
+  if (kind === 'agents') {
+    const ms = e.uses.map(u => u.ms).filter(x => x > 0)
+    stats.push(['Models', esc([...new Set(e.uses.map(u => u.model).filter(Boolean))].join(', ')) || null], ['Launched by', esc([...new Set(e.uses.map(u => u.by))].join(', ')) || null], ['Median run', ms.length ? fmtMs(ms.sort((a, b) => a - b)[Math.floor(ms.length / 2)]) : null], ['Tokens out', fmtNum(e.uses.reduce((t, u) => t + (u.out ?? 0), 0))], ['Background', `${e.uses.filter(u => u.background).length} of ${e.uses.length}`])
+  }
+  if (kind === 'skills') stats.push(['Source', esc(e.plugin ? `plugin ${e.plugin}` : e.source) || null], ['Via', esc([...new Set(e.uses.map(u => u.via))].join(', ')) || null], ['Loaded by', esc([...new Set(e.uses.map(u => u.by))].join(', ')) || null])
+  if (kind === 'hooks') stats.push(['Event', esc(e.event)], ['Command', e.command ? `<code>${esc(e.command)}</code>` : null], ['Source', esc(e.source)], ['Around tools', esc([...e.tools].map(([t, c]) => `${t} ×${c}`).join(', ')) || null], ['How it is known', e.host ? 'host app callbacks (not which one)' : e.uses.some(u => u.inferred) ? 'inferred from event and matcher' : 'from the transcript'])
+  html += sec('Summary', kv(stats))
+  if (e.listed.size && e.sessions.size < e.listed.size) html += sec('Offered but not used', `<div class="dim">Listed to the model in ${e.listed.size - e.sessions.size} session(s) where it was never ${kind === 'skills' ? 'loaded' : 'run'}. If you expected it there, its description may not match how you ask.</div>`)
+  html += sec(`Uses (${uses.length})`, uses.length ? `<div class="uses">${uses.slice(0, 80).map(u => `<a class="use" href="#${esc(u.sid)}~${esc(u.nodeId)}">
+      <span class="u-top"><b>${esc(u.label ? oneLine(u.label, 60) : u.args ? oneLine(u.args, 60) : u.tool ?? '')}</b><span>${esc(fmtAgo(u.ts))}</span></span>
+      <span class="u-sub">${esc(u.repo)} · ${esc(oneLine(u.prompt, 90))}</span>
+    </a>`).join('')}</div>` : '<div class="dim">Never used in these sessions.</div>')
+  el.innerHTML = html
+}
+
+function toggleHelp(show) {
+  const el = $('#help')
+  const on = show ?? el.hidden
+  el.hidden = !on
+  if (!on) return
+  const legend = (key, label, cls, c) => `<span class="lg"><span class="ico ${cls}" style="--c:var(${c})"><svg viewBox="0 0 24 24">${ICONS[key]}</svg></span>${label}</span>`
+  el.querySelector('.help').innerHTML = `
+    <div class="help-head"><h2>Session Flow</h2><button class="ghost" data-close>Close · Esc</button></div>
+    <p class="dim">What your Claude Code sessions did: every subagent, tool call, skill, hook and text, recorded by the session-flow plugin without changing the session.</p>
+    <div class="help-grid">
+      <section><h3>Views</h3>
+        <p><b>Sessions → Tree</b>: turns, then what each agent did. A subagent is one row (its Agent call is merged into it); its own work hangs below.</p>
+        <p><b>Sessions → Timeline</b> (<kbd>t</kbd>): one lane per agent. Thin bars are model requests, thick bars tool calls, striped bars subagents running. Idle gaps are folded (hatched). <kbd>⌘</kbd>+wheel zooms, drag to pan.</p>
+        <p><b>Components</b>: your subagent types, skills and hooks across sessions: how often, where, launched by whom, and where they were offered but not used.</p>
+      </section>
+      <section><h3>Shapes and colours</h3>
+        <div class="legend">
+          ${legend('agent', 'Agent (circle)', 'lg-agent', '--c-agent')}
+          ${legend('bash', 'Tool call (square, colour = family)', 'lg-tool', '--c-bash')}
+          ${legend('launch', 'Launch agent', 'lg-tool', '--c-agent')}
+          ${legend('workflow', 'Workflow', 'lg-tool', '--c-workflow')}
+          ${legend('skill', 'Skill', 'lg-dot', '--c-skill')}
+          ${legend('hook', 'Hook', 'lg-dot', '--c-hook')}
+          ${legend('text', 'Text', 'lg-dot', '--c-text')}
+          ${legend('thinking', 'Thinking', 'lg-dot', '--c-thinking')}
+          ${legend('turn', 'Turn, step, context (outline)', 'lg-struct', '--c-turn')}
+        </div>
+      </section>
+      <section><h3>Filters</h3>
+        <p><b>Presets</b> set everything at once (Agents only shows just who launched whom). <b>Scope</b> picks all agents, the main one, or one agent.</p>
+        <p><b>Kinds</b>: click to hide, <kbd>⌥</kbd>-click to show only one. Hidden kinds never hide their children: those move up and say where they came from. <b>Tools ▾</b> filters by family and tool.</p>
+      </section>
+      <section><h3>Keys</h3>
+        <div class="keys"><kbd>↑</kbd><kbd>↓</kbd> / <kbd>j</kbd><kbd>k</kbd> move · <kbd>→</kbd><kbd>←</kbd> open, close · <kbd>Enter</kbd> toggle · <kbd>/</kbd> search · <kbd>e</kbd> next error · <kbd>f</kbd> follow live · <kbd>t</kbd> tree or timeline · <kbd>?</kbd> help</div>
+      </section>
+      <section class="wide"><h3>What it cannot see</h3>
+        <p class="dim">Which hook command ran is inferred from your settings (Claude Code reports only the event); hooks of the Claude Desktop app are callbacks no settings file lists; some thinking arrives without text; skills preloaded into a subagent are not seen. The <b>health</b> badge in the header warns when a log looks incomplete, which usually means a Claude Code update changed something. Full list: docs/limitations.md.</p>
+      </section>
+    </div>`
 }
 
 function setFollow(on) {
@@ -1326,15 +1760,16 @@ async function main() {
   wire()
   syncControls()
   await loadSessions()
-  const sid = location.hash.slice(1) || state.sessions[0]?.sid
-  if (sid) await openSession(sid)
+  const [hashSid, hashNode] = location.hash.slice(1).split('~')
+  const sid = hashSid || state.sessions[0]?.sid
+  if (sid) await openSession(sid, hashNode)
   state.timer = setInterval(async () => {
     await loadSessions()
     if (state.live || state.sessions.find(s => s.sid === state.sid)?.live) await poll()
   }, POLL_MS)
   window.addEventListener('hashchange', () => {
-    const h = location.hash.slice(1)
-    if (h && h !== state.sid) openSession(h)
+    const [h, node] = location.hash.slice(1).split('~')
+    if (h && h !== state.sid) openSession(h, node)
   })
 }
 

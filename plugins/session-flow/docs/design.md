@@ -8,8 +8,8 @@ readable. Built for two uses:
 - **After the fact**: review a finished session calmly, and check that your own subagents, skills
   and hooks are used the way you expect.
 
-Status: collector and web viewer (tree, inspector, filters) working; Desktop pane and the other
-views to come. Targets the function-hooks (mod) API of Claude Code 2.1.295.
+Status: collector and web viewer working (tree, timeline, components). What is left, and how to
+work on the code: [development.md](development.md). Targets the function-hooks (mod) API of Claude Code 2.1.295.
 
 ## Architecture
 
@@ -107,15 +107,15 @@ The agent is the only kind that nests without a fixed limit (agent → step → 
 
 ## Views
 
-| View | Answers |
-|---|---|
-| Tree with time bars | What happened, in what order (the navigation base) |
-| Swimlanes | Who spawned whom, and when each answer came back |
-| Gantt | What ran in parallel, where the waits were |
-| Flame graph / icicle | Where time or tokens went |
-| Files | Who read or edited each file |
-| Now strip | What is running at this moment |
-| Components | Per subagent type / skill / hook, across sessions: how often, where, triggered by what |
+| View | Answers | Status |
+|---|---|---|
+| Tree with time bars | What happened, in what order (the navigation base) | Done |
+| Timeline (Gantt, one lane per agent, idle gaps folded) | What ran in parallel, where the waits were | Done |
+| Components | Per subagent type / skill / hook, across sessions: how often, where, triggered by what | Done |
+| Swimlanes | Who spawned whom, and when each answer came back | Later |
+| Flame graph / icicle | Where time or tokens went | Later |
+| Files | Who read or edited each file | Later |
+| Now strip | What is running at this moment | Later, with the Desktop pane |
 
 The **components** view serves the "is it used as I expect?" question: a subagent's invocations
 (who spawned it, with what prompt, cost) and the turns it was offered but not used; a hook's
@@ -128,13 +128,12 @@ encodes kind, subtle motion for live updates, dark mode.
 
 ## Roadmap
 
-1. Event format ([events.md](events.md)).
-2. Collector, no UI, writing the log.
-3. Web viewer: tree, inspector, filters.
-4. Desktop pane.
-5. Components view and the remaining views.
-6. Workflows: agents launched by a workflow carry `agent.spawn.workflow { runId, agentIndex }`;
-   group them under their run and show its phases (parallel, pipeline) instead of a flat list.
+1. Event format ([events.md](events.md)). Done.
+2. Collector, no UI, writing the log. Done.
+3. Web viewer: tree, inspector, filters. Done, with presets, agent scope and tool families.
+4. Components view and the timeline. Done; health checks, help and `tools/selfcheck.py` added.
+5. Desktop pane, expectations, workflows, the remaining views: see
+   [development.md](development.md#status-and-what-is-left).
 
 ## Constraints found in the API (2.1.295)
 
