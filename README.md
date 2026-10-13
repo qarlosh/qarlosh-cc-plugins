@@ -14,7 +14,7 @@ claude plugin install <plugin>@my-claude-plugins
 
 | Plugin | What it does |
 |---|---|
-| [session-flow](plugins/session-flow) | See what a session did: subagents, tools, skills, hooks and texts, as a navigable tree in a local viewer |
+| [blackbox](plugins/blackbox) | A flight recorder for Claude Code sessions: subagents, tools, skills, hooks and texts, recorded live and shown in a local viewer |
 
 ## License
 

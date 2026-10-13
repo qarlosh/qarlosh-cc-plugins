@@ -16,7 +16,7 @@ import statistics
 import sys
 
 path = sys.argv[1]
-plugin = sys.argv[2] if len(sys.argv) > 2 else "session-flow"
+plugin = sys.argv[2] if len(sys.argv) > 2 else "blackbox"
 pat = re.compile(rf"hooks module {re.escape(plugin)}@\S+ (\S+) settled in ([\d.]+)ms")
 times = collections.defaultdict(list)
 with open(path, encoding="utf-8", errors="replace") as f:

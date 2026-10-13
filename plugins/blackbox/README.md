@@ -1,6 +1,6 @@
-# session-flow
+# blackbox
 
-See what a Claude Code session actually did: which subagents ran and what they spawned, every
+A flight recorder for Claude Code sessions. See what a session actually did: which subagents ran and what they spawned, every
 tool call with its input and output, skills loaded, settings hooks fired, permission decisions,
 model requests and token usage, organised as a tree you can filter and navigate. Follow a long
 task live, or review a finished session later.
@@ -8,7 +8,7 @@ task live, or review a finished session later.
 It has two parts:
 
 - **Collector** (a mod): observes the session without changing it and appends one JSON record per
-  event to `~/.claude/flow/<session-id>.jsonl`.
+  event to `~/.claude/blackbox/<session-id>.jsonl`.
 - **Viewer**: a local web page over those logs.
   - **Tree**: turns, then what each agent did, with subagents nested under whoever launched them.
   - **Timeline**: one lane per agent, to see what ran in parallel and where the time went.
@@ -30,13 +30,13 @@ It has two parts:
 ## Install
 
 ```bash
-claude plugin install session-flow@my-claude-plugins
+claude plugin install blackbox@my-claude-plugins
 ```
 
 ## Use
 
 - Recording is automatic once the plugin is enabled.
-- In a session, `/session-flow` opens the viewer on that session. It starts the viewer's local
+- In a session, `/blackbox` opens the viewer on that session. It starts the viewer's local
   server in the background, or reuses the one already running; after a plugin update it replaces
   the old version's server. The server stops by itself after 8 hours without requests (an open
   viewer page keeps it alive).
@@ -46,7 +46,7 @@ claude plugin install session-flow@my-claude-plugins
   python3 <plugin>/viewer/server.py --open
   ```
 
-  It listens on `127.0.0.1:7777` (or the next free port) and reads `~/.claude/flow`.
+  It listens on `127.0.0.1:7777` (or the next free port) and reads `~/.claude/blackbox`.
 
 Views: presets (Everything, Agents only, Hooks only, …), an agent scope (all, main only, one
 agent), kinds of content and tool families to show or hide (⌥-click a kind to show only it).
@@ -64,15 +64,15 @@ record by record. The viewer's health badge flags the same problems on real sess
 
 ## Options
 
-Set with `claude plugin configure session-flow` (or `/config`):
+Set with `claude plugin configure blackbox` (or `/config`):
 
 | Option | Default | Meaning |
 |---|---|---|
 | `enabled` | `true` | Record sessions. Off, the plugin hooks nothing |
-| `logDir` | `~/.claude/flow` | Where logs are written |
+| `logDir` | `~/.claude/blackbox` | Where logs are written |
 | `maxTextChars` | `20000` | Longer texts are cut to this length |
 | `flushMs` | `3000` | How often buffered records are written |
-| `viewerPort` | `7777` | Local port of the viewer that `/session-flow` opens |
+| `viewerPort` | `7777` | Local port of the viewer that `/blackbox` opens |
 
 The viewer remembers, in your browser, the view, filters, preset, whether the sessions list is
 hidden (`[`) and the inspector's width (drag its left edge).
@@ -81,7 +81,7 @@ hidden (`[`) and the inspector's width (drag its left edge).
 
 In behaviour, no: every hook passes its event on untouched, it adds nothing to the model's
 context, makes no model calls, and writes to disk outside the hooks. The one exception is
-`/session-flow`, whose one-line answer goes into the conversation like any command's.
+`/blackbox`, whose one-line answer goes into the conversation like any command's.
 
 In time, a little: Claude Code waits for a round trip to the plugin's process on every observed
 event, about 1 ms per conversation row and a few ms per tool call. Measured on a short task, the

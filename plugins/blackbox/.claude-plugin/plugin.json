@@ -1,7 +1,7 @@
 {
-  "name": "session-flow",
-  "version": "0.5.2",
-  "description": "Records what a session does (subagents, tools, skills, hooks, texts) to a local log, to follow it live or review it later.",
+  "name": "blackbox",
+  "version": "0.6.0",
+  "description": "A flight recorder for Claude Code sessions: records what a session does (subagents, tools, skills, hooks, texts) without changing it, to follow it live or review it later.",
   "author": {
     "name": "Carlos Herrero"
   },
@@ -16,7 +16,7 @@
     "logDir": {
       "type": "string",
       "title": "Log folder",
-      "description": "Where session logs are written. Empty means ~/.claude/flow.",
+      "description": "Where session logs are written. Empty means ~/.claude/blackbox.",
       "default": ""
     },
     "maxTextChars": {
@@ -34,7 +34,7 @@
     "viewerPort": {
       "type": "number",
       "title": "Viewer port",
-      "description": "Local port of the web viewer that /session-flow opens.",
+      "description": "Local port of the web viewer that /blackbox opens.",
       "default": 7777
     }
   }

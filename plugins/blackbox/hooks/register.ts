@@ -142,7 +142,7 @@ async function resolveSession($: EngineInterface, c: Collector) {
   c.windows = os === 'Windows_NT'
   c.clockBase = clock
   c.perfBase = performance.now()
-  const dir = c.logDirOption ? c.logDirOption.replace(/^~(?=\/|$)/, home ?? '~') : `${home ?? '~'}/.claude/flow`
+  const dir = c.logDirOption ? c.logDirOption.replace(/^~(?=\/|$)/, home ?? '~') : `${home ?? '~'}/.claude/blackbox`
   c.home = home
   c.sid = id
   c.logPath = `${dir}/${id}.jsonl`
@@ -212,7 +212,7 @@ async function startSession($: EngineInterface, c: Collector, e: { cwd: unknown;
     const continued = c.logPath ? await $.fs.exists(c.logPath) : false
     c.observe('session', () => c.push('session.start', null, { cwd: e.cwd, surface: e.surface, isInteractive: e.isInteractive, continued }))
     $.clock.every(c.flushMs, () => void flush($, c))
-    await $.command.register({ name: 'session-flow', description: 'Open the session-flow viewer on this session' })
+    await $.command.register({ name: 'blackbox', description: 'Open the blackbox viewer on this session' })
     void recordOfferedSkills($, c)
   } catch (err) {
     c.fail('session.start', err)
@@ -249,10 +249,10 @@ export const register: Register = (on, options) => {
 
   // Session
 
-  on('command.run', { command: 'session-flow' }, async $ => {
+  on('command.run', { command: 'blackbox' }, async $ => {
     await flush($, c)
     await openViewer($, c)
-    return { text: 'session-flow viewer opened in the browser.' }
+    return { text: 'blackbox viewer opened in the browser.' }
   })
 
   on('session.start', async ($, e, next) => {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression check for session-flow: does the collector still see what it used to?
+"""Regression check for blackbox: does the collector still see what it used to?
 
 Run it after updating Claude Code. It starts a short scripted session in a
 temporary folder with the plugin loaded (`claude -p --plugin-dir`), a Bash call
@@ -36,14 +36,14 @@ def main():
 
     claude = shutil.which("claude") or "claude"
     version = subprocess.run([claude, "--version"], capture_output=True, text=True).stdout.strip()
-    work = Path(tempfile.mkdtemp(prefix="session-flow-check-"))
+    work = Path(tempfile.mkdtemp(prefix="blackbox-check-"))
     logs = work / "logs"
     (work / "a.txt").write_text("alpha\n")
     (work / "b.txt").write_text("beta\n")
     env = dict(os.environ)
     # The plugin reads its log folder from its options; point it at the temp folder.
     settings = work / "settings.json"
-    settings.write_text(json.dumps({"pluginConfigs": {"session-flow@inline": {"options": {"logDir": str(logs), "flushMs": 500}}}}))
+    settings.write_text(json.dumps({"pluginConfigs": {"blackbox@inline": {"options": {"logDir": str(logs), "flushMs": 500}}}}))
 
     print(f"Claude Code {version}; plugin {PLUGIN}")
     started = time.time()

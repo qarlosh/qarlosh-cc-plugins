@@ -1,6 +1,6 @@
 'use strict'
 
-// session-flow viewer. Reads a session log (docs/events.md) from the local
+// blackbox viewer. Reads a session log (docs/events.md) from the local
 // server, builds the tree session → turn → agent → step → call, and draws it
 // with a virtualised list, filters and an inspector.
 
@@ -1089,7 +1089,7 @@ function changed() {
 }
 
 // What the viewer remembers between visits, in this browser only.
-const PREFS_KEY = 'session-flow-prefs'
+const PREFS_KEY = 'blackbox-prefs'
 
 function savePrefs() {
   const f = state.filters
@@ -1488,7 +1488,7 @@ function wire() {
     const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'
     document.documentElement.dataset.theme = next
     try {
-      localStorage.setItem('session-flow-theme', next)
+      localStorage.setItem('blackbox-theme', next)
     } catch {}
   })
 
@@ -1948,8 +1948,8 @@ function toggleHelp(show) {
   if (!on) return
   const legend = (key, label, cls, c) => `<span class="lg"><span class="ico ${cls}" style="--c:var(${c})"><svg viewBox="0 0 24 24">${ICONS[key]}</svg></span>${label}</span>`
   el.querySelector('.help').innerHTML = `
-    <div class="help-head"><h2>Session Flow</h2><button class="ghost" data-close>Close · Esc</button></div>
-    <p class="dim">What your Claude Code sessions did: every subagent, tool call, skill, hook and text, recorded by the session-flow plugin without changing the session.</p>
+    <div class="help-head"><h2>Blackbox</h2><button class="ghost" data-close>Close · Esc</button></div>
+    <p class="dim">What your Claude Code sessions did: every subagent, tool call, skill, hook and text, recorded by the blackbox plugin without changing the session.</p>
     <div class="help-grid">
       <section><h3>Views</h3>
         <p><b>Sessions → Tree</b>: turns, then what each agent did. A subagent is one row (its Agent call is merged into it); its own work hangs below.</p>
@@ -1997,7 +1997,7 @@ function setFollow(on) {
 
 async function main() {
   try {
-    const t = localStorage.getItem('session-flow-theme')
+    const t = localStorage.getItem('blackbox-theme')
     if (t) document.documentElement.dataset.theme = t
     else if (matchMedia('(prefers-color-scheme: light)').matches) document.documentElement.dataset.theme = 'light'
   } catch {}

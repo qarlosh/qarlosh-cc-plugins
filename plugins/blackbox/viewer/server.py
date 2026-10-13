@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""session-flow viewer: a local web server over the session logs.
+"""blackbox viewer: a local web server over the session logs.
 
 Serves the page in this folder and a small JSON API that reads the logs the
-collector writes (default ~/.claude/flow). Listens on 127.0.0.1 only. No
+collector writes (default ~/.claude/blackbox). Listens on 127.0.0.1 only. No
 dependencies beyond the Python 3 standard library.
 
-    python3 server.py [--port 7777] [--log-dir ~/.claude/flow] [--open [SESSION_ID]] [--idle-hours 8]
+    python3 server.py [--port 7777] [--log-dir ~/.claude/blackbox] [--open [SESSION_ID]] [--idle-hours 8]
 
 With --open, a viewer already running on the port is reused when it is this
 same copy of the plugin, and replaced when it is another (an older version
@@ -249,7 +249,7 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         # A newer viewer asks this one to stop. The custom header keeps web pages
         # from doing it: a browser cannot send it cross-origin without a preflight.
-        if urlparse(self.path).path != "/api/shutdown" or self.headers.get("X-Session-Flow") != "shutdown":
+        if urlparse(self.path).path != "/api/shutdown" or self.headers.get("X-Blackbox") != "shutdown":
             self.send_error(404)
             return
         self.send_json({"stopping": True})
@@ -267,7 +267,7 @@ class Handler(SimpleHTTPRequestHandler):
             return super().do_GET()
         try:
             if parts == ["api", "info"]:
-                return self.send_json({"app": "session-flow", "version": VERSION, "root": str(HERE), "logDir": str(self.log_dir), "pid": os.getpid()})
+                return self.send_json({"app": "blackbox", "version": VERSION, "root": str(HERE), "logDir": str(self.log_dir), "pid": os.getpid()})
             if parts == ["api", "sessions"]:
                 logs = sorted(self.log_dir.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
                 return self.send_json([summarize(p) for p in logs])
@@ -303,14 +303,15 @@ class Handler(SimpleHTTPRequestHandler):
 
 def running_viewer(port):
     """What answers on the port: this viewer's /api/info, {} for an older
-    session-flow viewer without it, None when nothing (or something else) does."""
+    blackbox viewer without it, None when nothing (or something else) does."""
     from urllib.error import HTTPError
     from urllib.request import urlopen
 
     try:
         with urlopen(f"http://127.0.0.1:{port}/api/info", timeout=1) as r:
             info = json.load(r)
-            return info if info.get("app") == "session-flow" else None
+            # "session-flow" is this plugin's former name: its viewers are replaced too.
+            return info if info.get("app") in ("blackbox", "session-flow") else None
     except HTTPError as err:
         if err.code != 404:
             return None
@@ -324,13 +325,13 @@ def running_viewer(port):
 
 
 def stop_viewer(port, pid=None):
-    """Stops another session-flow viewer on the port, and only that: through its
+    """Stops another blackbox viewer on the port, and only that: through its
     own API (any platform), or, for a viewer too old to have it, by its process
     (needs lsof and ps)."""
     from urllib.request import Request, urlopen
 
     try:
-        urlopen(Request(f"http://127.0.0.1:{port}/api/shutdown", data=b"", method="POST", headers={"X-Session-Flow": "shutdown"}), timeout=2).read()
+        urlopen(Request(f"http://127.0.0.1:{port}/api/shutdown", data=b"", method="POST", headers={"X-Blackbox": "shutdown", "X-Session-Flow": "shutdown"}), timeout=2).read()
         for _ in range(30):
             if running_viewer(port) is None:
                 return
@@ -363,7 +364,7 @@ def stop_viewer(port, pid=None):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--port", type=int, default=7777)
-    ap.add_argument("--log-dir", default=os.environ.get("SESSION_FLOW_LOG_DIR") or "~/.claude/flow")
+    ap.add_argument("--log-dir", default=os.environ.get("BLACKBOX_LOG_DIR") or "~/.claude/blackbox")
     ap.add_argument("--open", nargs="?", const="", metavar="SESSION_ID", help="open the viewer in the browser")
     ap.add_argument("--idle-hours", type=float, default=8, help="stop after this long without requests (0: never)")
     args = ap.parse_args()
@@ -390,14 +391,14 @@ def main():
         sys.exit(f"no free port from {args.port}")
     Handler.server_ref = server
     url = f"http://127.0.0.1:{server.server_port}/"
-    print(f"session-flow viewer: {url}  (logs: {Handler.log_dir})", flush=True)
+    print(f"blackbox viewer: {url}  (logs: {Handler.log_dir})", flush=True)
     if args.open is not None:
         webbrowser.open(url + (f"#{args.open}" if args.open else ""))
     def idle_watch():
         while True:
             time.sleep(min(60, max(1, args.idle_hours * 900)))
             if time.time() - Handler.last_request > args.idle_hours * 3600:
-                print("session-flow viewer: idle, stopping", flush=True)
+                print("blackbox viewer: idle, stopping", flush=True)
                 server.shutdown()
                 return
 

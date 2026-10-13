@@ -1,4 +1,4 @@
-# session-flow — known limitations
+# blackbox — known limitations
 
 What the collector cannot see, or sees differently than you might expect. Each entry: the symptom,
 then the cause. Found on Claude Code 2.1.295; later builds may change any of them.

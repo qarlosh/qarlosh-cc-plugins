@@ -8,9 +8,9 @@
   },
   "plugins": [
     {
-      "name": "session-flow",
-      "source": "./plugins/session-flow",
-      "description": "See what a session did: subagents, tools, skills, hooks and texts, recorded live and shown as a navigable tree in a local viewer."
+      "name": "blackbox",
+      "source": "./plugins/blackbox",
+      "description": "A flight recorder for Claude Code sessions: subagents, tools, skills, hooks and texts, recorded live and shown in a local viewer as a tree, a timeline and a sequence diagram."
     }
   ]
 }

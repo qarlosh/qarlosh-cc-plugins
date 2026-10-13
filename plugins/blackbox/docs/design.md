@@ -1,4 +1,4 @@
-# session-flow — design
+# blackbox — design
 
 See what a Claude Code session actually did: which subagents ran (and what they spawned), which
 tools, skills and hooks fired, with every text and result, organised so a long cascade stays
@@ -27,7 +27,7 @@ Three parts that share one contract, the event log ([events.md](events.md)):
    one as its log grows.
 
 The log is the only contract: the viewer can evolve without touching the mod. Logs live outside
-any repo (default `~/.claude/flow/`): they hold session content.
+any repo (default `~/.claude/blackbox/`): they hold session content.
 
 Only sessions where the mod is active are recorded. Importing old transcripts is out of scope.
 
@@ -66,7 +66,7 @@ Performance:
   round trip can only be measured from outside, with `tools/hook-timings.py` over a `--debug` log.
   Compare a task with the plugin enabled and disabled too.
 - **Off switch.** The `enabled` option makes `register` hook nothing; `claude plugin disable
-  session-flow` stops it loading at all.
+  blackbox` stops it loading at all.
 
 ## Organising the information
 

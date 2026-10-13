@@ -1,4 +1,4 @@
-# session-flow — event log format (v1)
+# blackbox — event log format (v1)
 
 One JSON object per line in `<logDir>/<sessionId>.jsonl`. The collector writes it; the viewer
 reads it. Source API: Claude Code 2.1.295 function hooks.

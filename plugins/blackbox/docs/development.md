@@ -1,4 +1,4 @@
-# session-flow — development
+# blackbox — development
 
 How the code is laid out, how to work on it, what it relies on that Claude Code does not document,
 and what is left to do. Read this first when picking the plugin up in a new session; then
@@ -15,16 +15,16 @@ and what is left to do. Read this first when picking the plugin up in a new sess
 | `viewer/server.py` | Local server (stdlib only): serves the page, lists logs, returns records from an offset, infers hook configuration (settings and plugins), reads the transcript for hook detail and the session's entrypoint |
 | `viewer/app.js` | The page, plain JS. `build()` turns records into the tree model (agents merged with their Agent calls); `computeVisible()` applies filters, scope and promotion; `drawGantt()` is the timeline, `drawDiagram()` the sequence diagram (both take their lanes from `laneList()`, which applies the agent scope); `loadComponents()`/`collect()` the components view; `health()` the log checks |
 | `viewer/index.html`, `viewer/style.css` | Layout and theme (dark and light, colour per kind and tool family) |
-| Viewer preferences | `savePrefs()`/`loadPrefs()` keep view, filters, sidebar and inspector width in `localStorage` (`session-flow-prefs`, per origin, so per port) |
+| Viewer preferences | `savePrefs()`/`loadPrefs()` keep view, filters, sidebar and inspector width in `localStorage` (`blackbox-prefs`, per origin, so per port) |
 | `tools/hook-timings.py` | Per-event hook time from a `--debug` log: the collector's real cost |
 | `tools/selfcheck.py` | Regression check: a scripted `claude -p` session, then the log is checked record by record |
 
 ## Working on it
 
 - **Collector, live in Claude Desktop**: symlink the plugin folder into the session's mods folder,
-  `~/.claude/dev-mods/<session-id>/session-flow`, and accept hot reloading when asked. Each edit
-  reloads when the turn that made it ends. In a terminal: `claude --plugin-dir plugins/session-flow`.
-- **Checks**: `claude plugin validate plugins/session-flow`, `claude plugin test plugins/session-flow`,
+  `~/.claude/dev-mods/<session-id>/blackbox`, and accept hot reloading when asked. Each edit
+  reloads when the turn that made it ends. In a terminal: `claude --plugin-dir plugins/blackbox`.
+- **Checks**: `claude plugin validate plugins/blackbox`, `claude plugin test plugins/blackbox`,
   and `tsc` (once the plugin has loaded, `.claude-plugin/types/` holds the engine's types and
   `tsconfig.json` extends them; that folder is ignored by git).
 - **Viewer**: run a second server on another port against the working copy, so an installed
@@ -32,11 +32,11 @@ and what is left to do. Read this first when picking the plugin up in a new sess
   reload picks up edits. The installed copy lives in `~/.claude/plugins/cache/` and does not change
   until the plugin is updated.
 - **Debugging the engine side**: `claude -p --debug --plugin-dir …` writes
-  `~/.claude/debug/<session-id>.txt`; grep it for `session-flow` to see each hook's time and any hook
+  `~/.claude/debug/<session-id>.txt`; grep it for `blackbox` to see each hook's time and any hook
   the engine skipped (`bypassed by …`).
 - **Releasing**: bump `version` in `plugin.json`, then `claude plugin marketplace update
-  my-claude-plugins` and `claude plugin update session-flow@my-claude-plugins`, and restart the
-  sessions that use it. The next `/session-flow` replaces a viewer of the old version still running
+  my-claude-plugins` and `claude plugin update blackbox@my-claude-plugins`, and restart the
+  sessions that use it. The next `/blackbox` replaces a viewer of the old version still running
   on the port (`--open` compares the running server's `/api/info` root with its own). An idle viewer
   stops after `--idle-hours` (8) without requests.
 
@@ -51,7 +51,7 @@ Tested on macOS only. The collector shells out three times, each written for bot
 | Start the viewer (`openViewer`) | `nohup python3 server.py … &` | PowerShell `Start-Process -WindowStyle Hidden python` |
 
 The viewer server is plain Python: it opens the browser with `webbrowser` and stops an older viewer
-through `POST /api/shutdown` (with the `X-Session-Flow: shutdown` header); `lsof` and `ps` are only
+through `POST /api/shutdown` (with the `X-Blackbox: shutdown` header); `lsof` and `ps` are only
 a fallback for viewers older than 0.5.1. Home is `HOME`, else `USERPROFILE`.
 
 ## After a Claude Code update
@@ -85,14 +85,14 @@ held then; if a check fails, start here.
 | The agent listing reaches the model as an attachment row `agent_listing_delta` whose text has lines `- <type>: <description>` | "Offered" agent types in the components view | Logs |
 | `$.session.usage({ breakdown: 'summary' })` lists the skills offered (`context.breakdown.skills.skillFrontmatter`) | `offer.skills` | Types |
 | A mod's own `next.trace` covers only the links beneath it, so it cannot time its own round trip | Why cost is measured from `--debug` logs | Types |
-| On Desktop a pane `Link` opens only `https:` URLs | Why `/session-flow` opens the viewer with `open` | Types |
+| On Desktop a pane `Link` opens only `https:` URLs | Why `/blackbox` opens the viewer with `open` | Types |
 | Built-in tool names (about 70) | `FAMILIES` in `app.js`; unknown tools show as Other and the health check lists them | `.claude-plugin/types/claude-code-tools/index.d.ts` |
 
 ## Status and what is left
 
 Done: event format, collector, web viewer (tree with agents as the backbone, timeline, sequence
 diagram, components view, inspector, presets, agent scope, kinds and tool families, promotion of hidden kinds, hook
-inference, health checks, help), `/session-flow`, cost measurement, self-check.
+inference, health checks, help), `/blackbox`, cost measurement, self-check.
 
 Left for later sessions, roughly in order of value:
 
