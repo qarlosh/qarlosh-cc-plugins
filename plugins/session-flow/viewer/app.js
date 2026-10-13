@@ -557,6 +557,9 @@ function isOpen(n) {
 
 // Children as shown: steps flattened when hidden, runs of one tool grouped.
 function shownChildren(n) {
+  // A group's children are its calls as they are: grouping them again would
+  // return the group itself and recurse without end.
+  if (n.kind === 'group') return n.children
   let kids = []
   for (const c of n.children) {
     if (c.kind === 'step' && !state.filters.steps) kids.push(...shownChildren(c))

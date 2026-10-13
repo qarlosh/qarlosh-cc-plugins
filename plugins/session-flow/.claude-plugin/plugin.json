@@ -1,6 +1,6 @@
 {
   "name": "session-flow",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Records what a session does (subagents, tools, skills, hooks, texts) to a local log, to follow it live or review it later.",
   "author": {
     "name": "Carlos Herrero"
