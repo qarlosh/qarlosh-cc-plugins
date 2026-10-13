@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -243,6 +244,16 @@ class Handler(SimpleHTTPRequestHandler):
         return p if p.is_file() else None
 
     last_request = time.time()
+    server_ref = None
+
+    def do_POST(self):
+        # A newer viewer asks this one to stop. The custom header keeps web pages
+        # from doing it: a browser cannot send it cross-origin without a preflight.
+        if urlparse(self.path).path != "/api/shutdown" or self.headers.get("X-Session-Flow") != "shutdown":
+            self.send_error(404)
+            return
+        self.send_json({"stopping": True})
+        threading.Thread(target=Handler.server_ref.shutdown, daemon=True).start()
 
     def do_GET(self):
         Handler.last_request = time.time()
@@ -313,7 +324,21 @@ def running_viewer(port):
 
 
 def stop_viewer(port, pid=None):
-    """Stops another session-flow viewer on the port, and only that."""
+    """Stops another session-flow viewer on the port, and only that: through its
+    own API (any platform), or, for a viewer too old to have it, by its process
+    (needs lsof and ps)."""
+    from urllib.request import Request, urlopen
+
+    try:
+        urlopen(Request(f"http://127.0.0.1:{port}/api/shutdown", data=b"", method="POST", headers={"X-Session-Flow": "shutdown"}), timeout=2).read()
+        for _ in range(30):
+            if running_viewer(port) is None:
+                return
+            time.sleep(0.1)
+    except (OSError, ValueError):
+        pass
+    if not (shutil.which("lsof") and shutil.which("ps")):
+        return
     if not pid:
         try:
             out = subprocess.run(["lsof", "-t", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"], capture_output=True, text=True, timeout=5).stdout.split()
@@ -363,6 +388,7 @@ def main():
             continue
     if not server:
         sys.exit(f"no free port from {args.port}")
+    Handler.server_ref = server
     url = f"http://127.0.0.1:{server.server_port}/"
     print(f"session-flow viewer: {url}  (logs: {Handler.log_dir})", flush=True)
     if args.open is not None:

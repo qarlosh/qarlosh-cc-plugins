@@ -1,5 +1,8 @@
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
+// Platforms: macOS is tested; Linux uses the same commands (sh, cat, find, python3); on
+// Windows (OS=Windows_NT) the shell steps go through PowerShell instead, untested.
+//
 // Collector: observes engine events and appends one JSON record per event to
 // <logDir>/<sessionId>.jsonl. Format: docs/events.md. Rules: docs/design.md,
 // "No interference": every hook passes its event on untouched and returns what
@@ -30,6 +33,7 @@ class Collector {
   sessionInfoSeen = false
   transcriptTries = 0
   home: string | undefined
+  windows = false
   stats = { events: {} as Record<string, number>, ownMs: {} as Record<string, number>, errors: [] as string[] }
   statsDirty = false
   readonly skillNames = new Set<string>()
@@ -123,12 +127,19 @@ function pick(obj: unknown, keys: string[]) {
   return Object.keys(out).length ? out : undefined
 }
 
+// A PowerShell single-quoted string literal. Windows support is written but untested.
+function psQuote(s: string) {
+  return `'${s.replace(/'/g, "''")}'`
+}
+
 function skillKey(name: unknown) {
   return String(name ?? '').replace(/^\//, '')
 }
 
 async function resolveSession($: EngineInterface, c: Collector) {
-  const [id, clock, home] = await Promise.all([$.session.id(), $.clock.now(), $.env.get('HOME')])
+  const [id, clock, posixHome, winHome, os] = await Promise.all([$.session.id(), $.clock.now(), $.env.get('HOME'), $.env.get('USERPROFILE'), $.env.get('OS')])
+  const home = posixHome ?? winHome
+  c.windows = os === 'Windows_NT'
   c.clockBase = clock
   c.perfBase = performance.now()
   const dir = c.logDirOption ? c.logDirOption.replace(/^~(?=\/|$)/, home ?? '~') : `${home ?? '~'}/.claude/flow`
@@ -144,7 +155,10 @@ async function locateTranscript($: EngineInterface, c: Collector) {
   if (c.sessionInfoSeen || !c.home || !c.sid || c.transcriptTries >= 10) return
   c.transcriptTries++
   try {
-    const res = await $.process.run(['/usr/bin/find', `${c.home}/.claude/projects`, '-maxdepth', '2', '-name', `${c.sid}.jsonl`], { timeoutMs: 5000 })
+    const projects = `${c.home}/.claude/projects`
+    const res = c.windows
+      ? await $.process.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', `Get-ChildItem -LiteralPath ${psQuote(projects)} -Depth 1 -Filter ${psQuote(`${c.sid}.jsonl`)} | Select-Object -First 1 -ExpandProperty FullName`], { timeoutMs: 10000 })
+      : await $.process.run(['find', projects, '-maxdepth', '2', '-name', `${c.sid}.jsonl`], { timeoutMs: 5000 })
     const path = res.stdout.split('\n')[0]?.trim()
     if (!path) return
     c.sessionInfoSeen = true
@@ -164,7 +178,9 @@ async function flush($: EngineInterface, c: Collector) {
   c.flushing = true
   try {
     const text = batch.map(r => JSON.stringify(r.sid ? r : { ...r, sid: c.sid })).join('\n') + '\n'
-    const res = await $.process.run(['/bin/sh', '-c', 'mkdir -p "$(dirname "$0")" && cat >> "$0"', c.logPath], { stdin: text, timeoutMs: 5000 })
+    const res = c.windows
+      ? await $.process.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', `$p = ${psQuote(c.logPath)}; [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($p)); [IO.File]::AppendAllText($p, [Console]::In.ReadToEnd(), [Text.UTF8Encoding]::new($false))`], { stdin: text, timeoutMs: 10000 })
+      : await $.process.run(['/bin/sh', '-c', 'mkdir -p "$(dirname "$0")" && cat >> "$0"', c.logPath], { stdin: text, timeoutMs: 5000 })
     if (res.exitCode !== 0) throw new Error(res.stderr.slice(0, 200))
   } catch (err) {
     c.buffer = batch.concat(c.buffer).slice(-MAX_BUFFER)
@@ -208,7 +224,11 @@ async function startSession($: EngineInterface, c: Collector, e: { cwd: unknown;
 async function openViewer($: EngineInterface, c: Collector) {
   const args = [`${$.plugin.root}/viewer/server.py`, '--port', String(c.viewerPort), '--open', c.sid ?? '']
   if (c.logDirOption) args.push('--log-dir', c.logDirOption)
-  await $.process.run(['/bin/sh', '-c', 'nohup python3 "$@" >/dev/null 2>&1 &', 'sh', ...args], { timeoutMs: 10000 })
+  if (c.windows) {
+    await $.process.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', `Start-Process -WindowStyle Hidden -FilePath python -ArgumentList ${args.map(a => psQuote(`"${a}"`)).join(',')}`], { timeoutMs: 10000 })
+  } else {
+    await $.process.run(['/bin/sh', '-c', 'nohup python3 "$@" >/dev/null 2>&1 &', 'sh', ...args], { timeoutMs: 10000 })
+  }
 }
 
 async function refreshAfterClear($: EngineInterface, c: Collector, fromSeq: number) {

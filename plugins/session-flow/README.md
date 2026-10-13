@@ -23,6 +23,9 @@ It has two parts:
 
 - Claude Code with function hooks (mods), 2.1.295 or later.
 - Python 3 for the viewer (standard library only).
+- macOS (tested). Linux uses the same commands (`sh`, `cat`, `find`, `python3`) and should work.
+  Windows support is written (the collector's file steps go through PowerShell, the viewer starts
+  with `python`) but has not been tested.
 
 ## Install
 

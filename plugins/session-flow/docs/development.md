@@ -40,6 +40,20 @@ and what is left to do. Read this first when picking the plugin up in a new sess
   on the port (`--open` compares the running server's `/api/info` root with its own). An idle viewer
   stops after `--idle-hours` (8) without requests.
 
+## Platforms
+
+Tested on macOS only. The collector shells out three times, each written for both families:
+
+| Step | macOS and Linux | Windows (`OS=Windows_NT`, untested) |
+|---|---|---|
+| Append to the log (`flush`) | `sh -c 'mkdir -p … && cat >> …'` | PowerShell `[IO.File]::AppendAllText` |
+| Find the transcript (`locateTranscript`) | `find ~/.claude/projects -maxdepth 2 -name …` | PowerShell `Get-ChildItem -Depth 1` |
+| Start the viewer (`openViewer`) | `nohup python3 server.py … &` | PowerShell `Start-Process -WindowStyle Hidden python` |
+
+The viewer server is plain Python: it opens the browser with `webbrowser` and stops an older viewer
+through `POST /api/shutdown` (with the `X-Session-Flow: shutdown` header); `lsof` and `ps` are only
+a fallback for viewers older than 0.5.1. Home is `HOME`, else `USERPROFILE`.
+
 ## After a Claude Code update
 
 Run `python3 tools/selfcheck.py`. It needs `claude` logged in (an expired login makes the session

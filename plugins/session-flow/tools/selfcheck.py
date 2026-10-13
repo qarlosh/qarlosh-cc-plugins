@@ -34,7 +34,8 @@ def main():
     ap.add_argument("--keep", action="store_true", help="keep the temporary folder and print its path")
     args = ap.parse_args()
 
-    version = subprocess.run(["claude", "--version"], capture_output=True, text=True).stdout.strip()
+    claude = shutil.which("claude") or "claude"
+    version = subprocess.run([claude, "--version"], capture_output=True, text=True).stdout.strip()
     work = Path(tempfile.mkdtemp(prefix="session-flow-check-"))
     logs = work / "logs"
     (work / "a.txt").write_text("alpha\n")
@@ -47,7 +48,7 @@ def main():
     print(f"Claude Code {version}; plugin {PLUGIN}")
     started = time.time()
     run = subprocess.run(
-        ["claude", "-p", "--model", args.model, "--plugin-dir", str(PLUGIN), "--settings", str(settings),
+        [claude, "-p", "--model", args.model, "--plugin-dir", str(PLUGIN), "--settings", str(settings),
          "--allowedTools", "Bash(ls:*)", "Read", "Glob", "Grep", "Agent", "--output-format", "json", PROMPT],
         cwd=work, capture_output=True, text=True, env=env, timeout=600,
     )

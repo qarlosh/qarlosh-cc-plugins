@@ -2,3 +2,5 @@
 # Written by Claude Code when it loads a mod
 plugins/*/.claude-plugin/types/
 __pycache__/
+# Private notes for Claude Code, not published
+/CLAUDE.md
