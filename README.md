@@ -1,4 +1,4 @@
-# my-claude-plugins
+# qarlosh-cc-plugins
 
 A [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) with
 general-purpose plugins: skills, hooks, slash commands and agents.
@@ -6,8 +6,8 @@ general-purpose plugins: skills, hooks, slash commands and agents.
 ## Install
 
 ```bash
-claude plugin marketplace add <this repo: GitHub owner/repo, URL or local path>
-claude plugin install <plugin>@my-claude-plugins
+claude plugin marketplace add qarlosh/qarlosh-cc-plugins
+claude plugin install <plugin>@qarlosh-cc-plugins
 ```
 
 ## Plugins

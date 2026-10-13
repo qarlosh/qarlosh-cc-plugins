@@ -30,7 +30,8 @@ It has two parts:
 ## Install
 
 ```bash
-claude plugin install blackbox@my-claude-plugins
+claude plugin marketplace add qarlosh/qarlosh-cc-plugins
+claude plugin install blackbox@qarlosh-cc-plugins
 ```
 
 ## Use

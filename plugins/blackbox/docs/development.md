@@ -35,7 +35,7 @@ and what is left to do. Read this first when picking the plugin up in a new sess
   `~/.claude/debug/<session-id>.txt`; grep it for `blackbox` to see each hook's time and any hook
   the engine skipped (`bypassed by …`).
 - **Releasing**: bump `version` in `plugin.json`, then `claude plugin marketplace update
-  my-claude-plugins` and `claude plugin update blackbox@my-claude-plugins`, and restart the
+  qarlosh-cc-plugins` and `claude plugin update blackbox@qarlosh-cc-plugins`, and restart the
   sessions that use it. The next `/blackbox` replaces a viewer of the old version still running
   on the port (`--open` compares the running server's `/api/info` root with its own). An idle viewer
   stops after `--idle-hours` (8) without requests.
