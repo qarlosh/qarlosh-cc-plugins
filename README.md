@@ -12,7 +12,9 @@ claude plugin install <plugin>@my-claude-plugins
 
 ## Plugins
 
-None yet.
+| Plugin | What it does |
+|---|---|
+| [session-flow](plugins/session-flow) | See what a session did: subagents, tools, skills, hooks and texts, as a navigable tree in a local viewer |
 
 ## License
 

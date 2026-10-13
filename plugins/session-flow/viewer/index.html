@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Flow</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='8' cy='16' r='5' fill='%23a78bfa'/%3E%3Ccircle cx='24' cy='8' r='4' fill='%232dd4bf'/%3E%3Ccircle cx='24' cy='24' r='4' fill='%23fbbf24'/%3E%3Cpath d='M12 14 20 9M12 18l8 5' stroke='%23e6e9f2' stroke-width='2'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="8" cy="16" r="5" class="b1"/><circle cx="24" cy="8" r="4" class="b2"/><circle cx="24" cy="24" r="4" class="b3"/><path d="M12 14 20 9M12 18l8 5"/></svg>
+      <div><b>Session Flow</b><small>what your Claude sessions did</small></div>
+    </div>
+    <input id="session-search" class="search" type="search" placeholder="Filter sessions" autocomplete="off">
+    <div id="sessions" class="sessions"></div>
+    <div class="side-foot">
+      <button id="theme" class="ghost" title="Toggle theme">◐ Theme</button>
+      <span id="side-count"></span>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="top">
+      <div class="title-row">
+        <div class="title-wrap">
+          <h1 id="title">Pick a session</h1>
+          <div id="subtitle" class="subtitle"></div>
+        </div>
+        <div class="live-wrap">
+          <span id="live" class="live" hidden><i></i>live</span>
+          <button id="follow" class="ghost toggle" title="Follow the newest activity (f)">Follow</button>
+        </div>
+      </div>
+      <div id="stats" class="stats"></div>
+      <div class="filters">
+        <div class="search-wrap">
+          <input id="q" class="search" type="search" placeholder="Search texts, commands, files…  ( / )" autocomplete="off">
+        </div>
+        <select id="preset" title="Preset views"></select>
+        <select id="scope" title="Which agents' work to show"></select>
+        <div id="kinds" class="kinds"></div>
+        <label class="check"><input id="errors" type="checkbox"> Errors only</label>
+        <label class="check"><input id="steps" type="checkbox" checked> Steps</label>
+        <label class="check" title="Thinking blocks whose text Claude Code does not hand to plugins"><input id="empty-thinking" type="checkbox"> Empty thinking</label>
+        <select id="mindur" title="Minimum duration">
+          <option value="0">Any duration</option>
+          <option value="1000">≥ 1 s</option>
+          <option value="5000">≥ 5 s</option>
+          <option value="30000">≥ 30 s</option>
+          <option value="120000">≥ 2 min</option>
+        </select>
+        <button id="expand-all" class="ghost" title="Expand all">Expand</button>
+        <button id="collapse-all" class="ghost" title="Collapse all">Collapse</button>
+      </div>
+    </header>
+
+    <section class="tree-wrap">
+      <div class="tree-head"><span>Flow</span><span class="tl-head">Timeline (per turn)</span></div>
+      <div id="tree" class="tree" tabindex="0"><div id="spacer"></div><div id="rows"></div></div>
+      <div id="empty" class="empty">
+        <div class="orbit"><i></i><i></i><i></i></div>
+        <p>Choose a session on the left.<br><small>Logs are read from the folder the collector writes to.</small></p>
+      </div>
+    </section>
+  </main>
+
+  <aside id="inspector" class="inspector">
+    <div class="insp-empty">Select a row to see everything about it.</div>
+  </aside>
+</div>
+<div id="family-pop" class="pop" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+{
+  "name": "session-flow",
+  "version": "0.2.1",
+  "description": "Records what a session does (subagents, tools, skills, hooks, texts) to a local log, to follow it live or review it later.",
+  "author": {
+    "name": "Carlos Herrero"
+  },
+  "license": "MIT",
+  "userConfig": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enabled",
+      "description": "Record sessions. Off, the plugin hooks nothing.",
+      "default": true
+    },
+    "logDir": {
+      "type": "string",
+      "title": "Log folder",
+      "description": "Where session logs are written. Empty means ~/.claude/flow.",
+      "default": ""
+    },
+    "maxTextChars": {
+      "type": "number",
+      "title": "Max text length",
+      "description": "Longer texts (prompts, outputs, answers) are cut to this many characters.",
+      "default": 20000
+    },
+    "flushMs": {
+      "type": "number",
+      "title": "Flush interval (ms)",
+      "description": "How often buffered records are written to the log.",
+      "default": 3000
+    }
+  }
+}

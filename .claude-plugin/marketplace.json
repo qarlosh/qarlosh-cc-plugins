@@ -1,8 +1,16 @@
 {
   "name": "my-claude-plugins",
-  "owner": { "name": "Carlos Herrero" },
+  "owner": {
+    "name": "Carlos Herrero"
+  },
   "metadata": {
     "description": "General-purpose plugins for Claude Code: skills, hooks, commands and agents."
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "session-flow",
+      "source": "./plugins/session-flow",
+      "description": "See what a session did: subagents, tools, skills, hooks and texts, recorded live and shown as a navigable tree in a local viewer."
+    }
+  ]
 }

@@ -1,1 +1,4 @@
 .DS_Store
+# Written by Claude Code when it loads a mod
+plugins/*/.claude-plugin/types/
+__pycache__/
