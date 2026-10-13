@@ -5,13 +5,20 @@ Serves the page in this folder and a small JSON API that reads the logs the
 collector writes (default ~/.claude/flow). Listens on 127.0.0.1 only. No
 dependencies beyond the Python 3 standard library.
 
-    python3 server.py [--port 7777] [--log-dir ~/.claude/flow] [--open [SESSION_ID]]
+    python3 server.py [--port 7777] [--log-dir ~/.claude/flow] [--open [SESSION_ID]] [--idle-hours 8]
+
+With --open, a viewer already running on the port is reused when it is this
+same copy of the plugin, and replaced when it is another (an older version
+after an update). A viewer stops by itself after --idle-hours without
+requests; an open page keeps it alive, since it polls every few seconds.
 """
 
 import argparse
 import json
 import os
 import re
+import signal
+import subprocess
 import sys
 import threading
 import time
@@ -27,6 +34,11 @@ HEAD_LINES = 400
 
 _hooks_cache: dict = {}
 _hooks_lock = threading.Lock()
+
+try:
+    VERSION = json.loads((HERE.parent / ".claude-plugin" / "plugin.json").read_text()).get("version", "?")
+except (OSError, ValueError):
+    VERSION = "?"
 
 
 def read_head(path: Path, max_lines: int = HEAD_LINES):
@@ -230,7 +242,10 @@ class Handler(SimpleHTTPRequestHandler):
         p = self.log_dir / f"{sid}.jsonl"
         return p if p.is_file() else None
 
+    last_request = time.time()
+
     def do_GET(self):
+        Handler.last_request = time.time()
         url = urlparse(self.path)
         q = parse_qs(url.query)
         parts = [p for p in url.path.split("/") if p]
@@ -240,6 +255,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             return super().do_GET()
         try:
+            if parts == ["api", "info"]:
+                return self.send_json({"app": "session-flow", "version": VERSION, "root": str(HERE), "logDir": str(self.log_dir), "pid": os.getpid()})
             if parts == ["api", "sessions"]:
                 logs = sorted(self.log_dir.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
                 return self.send_json([summarize(p) for p in logs])
@@ -273,25 +290,69 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({"error": str(err)}, 500)
 
 
+def running_viewer(port):
+    """What answers on the port: this viewer's /api/info, {} for an older
+    session-flow viewer without it, None when nothing (or something else) does."""
+    from urllib.error import HTTPError
+    from urllib.request import urlopen
+
+    try:
+        with urlopen(f"http://127.0.0.1:{port}/api/info", timeout=1) as r:
+            info = json.load(r)
+            return info if info.get("app") == "session-flow" else None
+    except HTTPError as err:
+        if err.code != 404:
+            return None
+        try:
+            with urlopen(f"http://127.0.0.1:{port}/api/sessions", timeout=1) as r:
+                return {} if isinstance(json.load(r), list) else None
+        except (OSError, ValueError):
+            return None
+    except (OSError, ValueError):
+        return None
+
+
+def stop_viewer(port, pid=None):
+    """Stops another session-flow viewer on the port, and only that."""
+    if not pid:
+        try:
+            out = subprocess.run(["lsof", "-t", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN"], capture_output=True, text=True, timeout=5).stdout.split()
+            pid = int(out[0]) if out else None
+        except (OSError, ValueError, subprocess.SubprocessError):
+            pid = None
+    if not pid:
+        return
+    try:
+        cmd = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return
+    if "viewer/server.py" not in cmd:
+        return
+    os.kill(int(pid), signal.SIGTERM)
+    for _ in range(30):
+        if running_viewer(port) is None:
+            return
+        time.sleep(0.1)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--port", type=int, default=7777)
     ap.add_argument("--log-dir", default=os.environ.get("SESSION_FLOW_LOG_DIR") or "~/.claude/flow")
     ap.add_argument("--open", nargs="?", const="", metavar="SESSION_ID", help="open the viewer in the browser")
+    ap.add_argument("--idle-hours", type=float, default=8, help="stop after this long without requests (0: never)")
     args = ap.parse_args()
     Handler.log_dir = Path(os.path.expanduser(args.log_dir))
 
-    # A viewer already running on the port: just open it.
+    # A viewer already on the port: reuse it if it is this copy, replace it if
+    # it is another (an older version keeps serving its old files otherwise).
     if args.open is not None:
-        try:
-            from urllib.request import urlopen
-
-            with urlopen(f"http://127.0.0.1:{args.port}/api/sessions", timeout=1) as r:
-                if isinstance(json.load(r), list):
-                    webbrowser.open(f"http://127.0.0.1:{args.port}/" + (f"#{args.open}" if args.open else ""))
-                    return
-        except (OSError, ValueError):
-            pass
+        running = running_viewer(args.port)
+        if running and running.get("root") == str(HERE) and running.get("logDir") == str(Handler.log_dir):
+            webbrowser.open(f"http://127.0.0.1:{args.port}/" + (f"#{args.open}" if args.open else ""))
+            return
+        if running:
+            stop_viewer(args.port, running.get("pid"))
 
     server = None
     for port in range(args.port, args.port + 20):
@@ -306,6 +367,16 @@ def main():
     print(f"session-flow viewer: {url}  (logs: {Handler.log_dir})", flush=True)
     if args.open is not None:
         webbrowser.open(url + (f"#{args.open}" if args.open else ""))
+    def idle_watch():
+        while True:
+            time.sleep(min(60, max(1, args.idle_hours * 900)))
+            if time.time() - Handler.last_request > args.idle_hours * 3600:
+                print("session-flow viewer: idle, stopping", flush=True)
+                server.shutdown()
+                return
+
+    if args.idle_hours > 0:
+        threading.Thread(target=idle_watch, daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

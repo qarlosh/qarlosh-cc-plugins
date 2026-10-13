@@ -35,7 +35,9 @@ and what is left to do. Read this first when picking the plugin up in a new sess
   the engine skipped (`bypassed by …`).
 - **Releasing**: bump `version` in `plugin.json`, then `claude plugin marketplace update
   my-claude-plugins` and `claude plugin update session-flow@my-claude-plugins`, and restart the
-  sessions that use it. Stop a running viewer of the old version (it serves the old files).
+  sessions that use it. The next `/session-flow` replaces a viewer of the old version still running
+  on the port (`--open` compares the running server's `/api/info` root with its own). An idle viewer
+  stops after `--idle-hours` (8) without requests.
 
 ## After a Claude Code update
 

@@ -31,7 +31,10 @@ claude plugin install session-flow@my-claude-plugins
 ## Use
 
 - Recording is automatic once the plugin is enabled.
-- In a session, `/session-flow` opens the viewer on that session.
+- In a session, `/session-flow` opens the viewer on that session. It starts the viewer's local
+  server in the background, or reuses the one already running; after a plugin update it replaces
+  the old version's server. The server stops by itself after 8 hours without requests (an open
+  viewer page keeps it alive).
 - Or run the viewer yourself:
 
   ```bash
