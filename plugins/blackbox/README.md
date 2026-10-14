@@ -1,6 +1,6 @@
-<img src="viewer/logo.svg" alt="blackbox logo" width="96" align="right">
+<p align="center"><img src="viewer/logo.svg" alt="blackbox logo" width="112"></p>
 
-# blackbox
+<h1 align="center">blackbox</h1>
 
 A flight recorder for Claude Code sessions. See what a session actually did: which subagents ran and what they spawned, every
 tool call with its input and output, skills loaded, settings hooks fired, permission decisions,
@@ -38,8 +38,7 @@ claude plugin install blackbox@qarlosh-cc-plugins
 
 ## Use
 
-- Recording is automatic once the plugin is enabled. When a session starts, a band above the
-  prompt says so for a few seconds (dismiss it with its close button).
+- Recording is automatic once the plugin is enabled.
 - A **blackbox** button in the prompt footer opens the viewer on that session (in the terminal,
   where it cannot be pressed, it shows as `▣ blackbox`). It reads **blackbox ⚠** if writing the
   log fails.
@@ -89,7 +88,7 @@ hidden (`[`) and the inspector's width (drag its left edge).
 In behaviour, no: every hook passes its event on untouched, it adds nothing to the model's
 context, makes no model calls, and writes to disk outside the hooks. The one exception is
 `/blackbox`, whose one-line answer goes into the conversation like any command's. Its only
-additions to the interface are the footer button and the short intro band.
+addition to the interface is the footer button.
 
 In time, a little: Claude Code waits for a round trip to the plugin's process on every observed
 event, about 1 ms per conversation row and a few ms per tool call. Measured on a short task, the
