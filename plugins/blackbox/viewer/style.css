@@ -130,9 +130,7 @@ body.resizing { cursor: col-resize; user-select: none; }
   backdrop-filter: blur(14px);
 }
 .brand { display: flex; gap: 10px; align-items: center; padding: 16px 16px 12px; }
-.brand svg { width: 30px; height: 30px; flex: none; }
-.brand svg path { stroke: var(--muted); stroke-width: 2; fill: none; }
-.brand .b1 { fill: var(--c-agent); } .brand .b2 { fill: var(--c-read); } .brand .b3 { fill: var(--c-bash); }
+.brand img { width: 30px; height: 30px; flex: none; }
 .brand b { display: block; font-size: 15px; letter-spacing: 0.2px; }
 .brand small { color: var(--muted); }
 

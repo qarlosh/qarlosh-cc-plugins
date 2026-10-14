@@ -261,7 +261,7 @@ class Handler(SimpleHTTPRequestHandler):
         q = parse_qs(url.query)
         parts = [p for p in url.path.split("/") if p]
         if parts[:1] != ["api"]:
-            if url.path not in ("/", "/index.html", "/app.js", "/style.css"):
+            if url.path not in ("/", "/index.html", "/app.js", "/style.css", "/logo.svg"):
                 self.send_error(404)
                 return
             return super().do_GET()

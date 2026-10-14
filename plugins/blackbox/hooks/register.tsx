@@ -16,6 +16,12 @@ const AGENT_STATS = ['status', 'totalDurationMs', 'totalTokens', 'totalToolUseCo
 const SKILL_STATS = ['commandName', 'status', 'model']
 const MAX_BUFFER = 50_000
 
+// The logo, as viewer/logo.svg; the intro band draws it where the surface takes an Svg.
+const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><polygon points="32,5 57,18.5 32,32 7,18.5" fill="#3b3d42"/><polygon points="7,18.5 32,32 32,60 7,46.5" fill="#1d1e21"/><polygon points="32,32 57,18.5 57,46.5 32,60" fill="#0e0f11"/><polygon points="7,31 32,44.5 32,50.5 7,37" fill="#ff8a1f"/><polygon points="32,44.5 57,31 57,37 32,50.5" fill="#e06a0b"/><polyline points="7,18.5 32,5 57,18.5" fill="none" stroke="#6b6e75" stroke-width="1.2" stroke-linejoin="round"/><polyline points="7,18.5 32,32 57,18.5" fill="none" stroke="#55585e" stroke-width="1" stroke-linejoin="round"/><line x1="32" y1="32" x2="32" y2="60" stroke="#2c2e32" stroke-width="1"/><circle cx="32" cy="18.5" r="2.6" fill="#ff8a1f"/></svg>`
+const ORANGE = '#ff8a1f'
+const GLYPH = '▣'
+const INTRO_MS = 10_000
+
 class Collector {
   readonly maxText: number
   readonly flushMs: number
@@ -36,6 +42,10 @@ class Collector {
   windows = false
   stats = { events: {} as Record<string, number>, ownMs: {} as Record<string, number>, errors: [] as string[] }
   statsDirty = false
+  // Whether the last write to the log failed; the indicators say so.
+  writeFailing = false
+  // Whether the band above the prompt shows its one-line introduction.
+  introShown = false
   readonly skillNames = new Set<string>()
 
   constructor(options: PluginOptions) {
@@ -182,11 +192,38 @@ async function flush($: EngineInterface, c: Collector) {
       ? await $.process.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', `$p = ${psQuote(c.logPath)}; [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($p)); [IO.File]::AppendAllText($p, [Console]::In.ReadToEnd(), [Text.UTF8Encoding]::new($false))`], { stdin: text, timeoutMs: 10000 })
       : await $.process.run(['/bin/sh', '-c', 'mkdir -p "$(dirname "$0")" && cat >> "$0"', c.logPath], { stdin: text, timeoutMs: 5000 })
     if (res.exitCode !== 0) throw new Error(res.stderr.slice(0, 200))
+    setWriteFailing($, c, false)
   } catch (err) {
     c.buffer = batch.concat(c.buffer).slice(-MAX_BUFFER)
     c.fail('flush', err)
+    setWriteFailing($, c, true)
   } finally {
     c.flushing = false
+  }
+}
+
+// Indicators: a blackbox button in the prompt footer, always there, and a band
+// above the prompt that introduces the plugin for a few seconds when a session
+// starts. They draw only; a failure in one gives the engine's own drawing back.
+
+function setWriteFailing($: EngineInterface, c: Collector, failing: boolean) {
+  if (c.writeFailing === failing) return
+  c.writeFailing = failing
+  $.ui.invalidate('ui.render')
+}
+
+function setIntroShown($: EngineInterface, c: Collector, shown: boolean) {
+  if (c.introShown === shown) return
+  c.introShown = shown
+  $.ui.invalidate('ui.render')
+}
+
+async function pressOpenViewer($: EngineInterface, c: Collector) {
+  try {
+    await flush($, c)
+    await openViewer($, c)
+  } catch (err) {
+    c.fail('viewer', err)
   }
 }
 
@@ -212,6 +249,8 @@ async function startSession($: EngineInterface, c: Collector, e: { cwd: unknown;
     const continued = c.logPath ? await $.fs.exists(c.logPath) : false
     c.observe('session', () => c.push('session.start', null, { cwd: e.cwd, surface: e.surface, isInteractive: e.isInteractive, continued }))
     $.clock.every(c.flushMs, () => void flush($, c))
+    setIntroShown($, c, true)
+    $.clock.after(INTRO_MS, () => setIntroShown($, c, false))
     await $.command.register({ name: 'blackbox', description: 'Open the blackbox viewer on this session' })
     void recordOfferedSkills($, c)
   } catch (err) {
@@ -254,6 +293,34 @@ export const register: Register = (on, options) => {
     await openViewer($, c)
     return { text: 'blackbox viewer opened in the browser.' }
   })
+
+  // Indicators
+
+  on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => {
+    if (e.props.hasSurvey || !c.introShown) return next(e)
+    const ui = $.ui.resolve(e)
+    const { Box, Text, Button } = ui
+    return (
+      <Box flexDirection="row" alignItems="center" gap={1}>
+        {'Svg' in ui ? <ui.Svg source={LOGO_SVG} alt="blackbox logo" width={16} height={16} /> : <Text color={ORANGE}>{GLYPH}</Text>}
+        <Text dimColor>
+          <Text bold>blackbox</Text> is recording this session (subagents, tools, skills, hooks). Open it with /blackbox or the blackbox button below.
+        </Text>
+        <Button key="dismiss-intro" label="Dismiss" role="dismiss" onPress={() => setIntroShown($, c, false)} />
+      </Box>
+    )
+  }).catch(($, e, next) => next(e))
+
+  on('ui.render', { component: 'SessionMode' }, ($, e, next) => {
+    if (e.surface === 'terminal') return next({ ...e, props: { ...e.props, modes: [...e.props.modes, `${GLYPH} blackbox`] } })
+    const { Box, Text, Button } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="row" alignItems="center" gap={1}>
+        {e.props.modes.length > 0 && <Text dimColor>{e.props.modes.join(' & ')}</Text>}
+        <Button key="open-viewer" label={c.writeFailing ? 'blackbox ⚠' : 'blackbox'} plain dimColor onPress={() => void pressOpenViewer($, c)} />
+      </Box>
+    )
+  }).catch(($, e, next) => next(e))
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)

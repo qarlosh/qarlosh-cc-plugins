@@ -10,7 +10,7 @@ and what is left to do. Read this first when picking the plugin up in a new sess
 | File | What it is |
 |---|---|
 | `.claude-plugin/plugin.json` | Manifest and options (`enabled`, `logDir`, `maxTextChars`, `flushMs`) |
-| `hooks/hooks.json`, `hooks/register.ts` | The collector, a mod (function hooks). One `Collector` object holds the state; functions that use `$` live at the top level of the file (the validator requires it) |
+| `hooks/hooks.json`, `hooks/register.tsx` | The collector, a mod (function hooks). One `Collector` object holds the state; functions that use `$` live at the top level of the file (the validator requires it) |
 | `tests/no-interference.test.ts` | Engine tests: a tool call and a prompt pass through unchanged |
 | `viewer/server.py` | Local server (stdlib only): serves the page, lists logs, returns records from an offset, infers hook configuration (settings and plugins), reads the transcript for hook detail and the session's entrypoint |
 | `viewer/app.js` | The page, plain JS. `build()` turns records into the tree model (agents merged with their Agent calls); `computeVisible()` applies filters, scope and promotion; `drawGantt()` is the timeline, `drawDiagram()` the sequence diagram (both take their lanes from `laneList()`, which applies the agent scope); `loadComponents()`/`collect()` the components view; `health()` the log checks |
@@ -67,7 +67,7 @@ held then; if a check fails, start here.
 
 | Behaviour | Where it is used | How it was found |
 |---|---|---|
-| The mod API itself (event names and fields) is "early access" and may change without notice | Everything in `register.ts` | The types file says so |
+| The mod API itself (event names and fields) is "early access" and may change without notice | Everything in `register.tsx` | The types file says so |
 | `cc-plugin-sec-default` skips user plugins on every `classic.*` event, and answers `skill.prompt` first | Why there are no `hook` records and skills come from the Skill tool | `--debug`: `classic.<Event> bypassed by cc-plugin-sec-default` |
 | In a session that fails to authenticate, `classic.*` events do reach the plugin | Explains `hook` records in failed sessions | Seen twice, both with an expired login |
 | Each settings-hook run leaves a conversation row: `session.append` with `origin.kind: 'hook'`, `origin.event`, `name` such as `hook_success`, and no payload | How the viewer sees hooks at all | Logs |
