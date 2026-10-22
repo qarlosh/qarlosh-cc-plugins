@@ -3,19 +3,26 @@
 #   collect.py list <days>  reads the desktop app's session records, its sidebar sections,
 #                           projects and pins, and the tail of each transcript, and prints
 #                           one JSON object: sessions used within <days>, and older ones.
-#   collect.py open <url>   opens a claude:// link with the system's handler.
+#   collect.py open <url>   opens a claude:// link with the system's handler for it.
 #
 # The desktop app's records and preferences are undocumented: whatever cannot be read is
 # left out rather than failing the whole listing.
 import glob
 import json
 import os
+import subprocess
 import sys
 import time
-import webbrowser
 
 if sys.argv[1] == 'open':
-    webbrowser.open(sys.argv[2])
+    # The system's own handler for the scheme: webbrowser would hand claude:// to a browser.
+    url = sys.argv[2]
+    if sys.platform == 'darwin':
+        subprocess.run(['open', url], check=True)
+    elif sys.platform == 'win32':
+        os.startfile(url)
+    else:
+        subprocess.run(['xdg-open', url], check=True)
     sys.exit(0)
 
 days = float(sys.argv[2])
