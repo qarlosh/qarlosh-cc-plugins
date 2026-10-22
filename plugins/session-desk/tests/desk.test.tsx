@@ -18,6 +18,7 @@ const LISTING = {
     },
   ],
   older: [{ id: 'local_b', title: 'Beta', lastActivityAt: NOW - 9 * 86400000, section: '', folder: 'beta', pinned: false }],
+  archived: [] as string[],
 }
 
 const PANE = { plugin: 'session-desk', surface: 'desktop', component: 'Pane', requestId: 'session-desk' } as const
@@ -94,5 +95,22 @@ test('picking a period lists that range and is remembered', async ($, on) => {
   // Reopening keeps the period picked in the pane.
   await $.command.run(COMMAND)
   expect((await ui.find({ key: 'period' }))?.props.value).toBe('2d-10d')
+  await ui.unmount()
+})
+
+test('an archived session leaves the pane but keeps its mark', async ($, on) => {
+  const ui = await openPane($, on)
+  await ui.post({ type: 'mark', id: 'local_a', mark: 'blue' }, { in: 'dot-local_a' })
+
+  const [alpha] = LISTING.recent
+  LISTING.recent = []
+  LISTING.archived = ['local_a']
+  await ui.press({ key: 'refresh' })
+  expect(await ui.find({ key: 'item-local_a' })).toBeUndefined()
+
+  LISTING.recent = [alpha!]
+  LISTING.archived = []
+  await ui.press({ key: 'refresh' })
+  expect((await ui.find({ key: 'item-local_a' }))?.props.backgroundColor).toBe('#3b82f624')
   await ui.unmount()
 })

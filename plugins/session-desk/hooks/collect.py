@@ -4,7 +4,8 @@
 #                           reads the desktop app's session records, its sidebar sections,
 #                           projects and pins, and prints one JSON object: `recent`, the
 #                           sessions last used in [since, until) (epoch ms) with the tail
-#                           of their transcripts, and `older`, every other open session.
+#                           of their transcripts, `older`, every other open session, and
+#                           `archived`, the ids of archived ones (their marks are kept).
 #   collect.py open <url>   opens a claude:// link with the system's handler for it.
 #
 # The desktop app's records and preferences are undocumented: whatever cannot be read is
@@ -97,7 +98,7 @@ def tail(cli):
     return user, reply, recap
 
 
-recent, older = [], []
+recent, older, archived = [], [], []
 for root in roots:
     prefs = epitaxy(root)
     names = sections(prefs)
@@ -108,6 +109,7 @@ for root in roots:
         except Exception:
             continue
         if d.get('isArchived'):
+            archived.append(d['sessionId'])
             continue
         base = {'id': d['sessionId'], 'title': d.get('title') or '(untitled)',
                 'lastActivityAt': d.get('lastActivityAt', 0),
@@ -124,4 +126,4 @@ for root in roots:
 
 recent.sort(key=lambda s: -s['lastActivityAt'])
 older.sort(key=lambda s: -s['lastActivityAt'])
-print(json.dumps({'recent': recent, 'older': older}))
+print(json.dumps({'recent': recent, 'older': older, 'archived': archived}))

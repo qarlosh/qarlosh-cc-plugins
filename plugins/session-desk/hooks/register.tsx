@@ -102,7 +102,8 @@ async function restore($: EngineInterface) {
   await update($, marks, () => colorMarks as Record<string, Mark>)
 }
 
-// Entries for sessions no longer listed (archived or deleted) are dropped from the store.
+// Entries for sessions that no longer exist are dropped from the store; an archived session
+// keeps its marks, so unarchiving it brings them back.
 function keepListed<T>(record: Record<string, T>, ids: Set<string>): Record<string, T> {
   return Object.fromEntries(Object.entries(record).filter(([id]) => ids.has(id)))
 }
@@ -159,8 +160,8 @@ async function load($: EngineInterface) {
     const [since, until] = rangeOf(await read($, period), Date.now())
     const ran = await helper($, ['list', String(since), String(until === Infinity ? Number.MAX_SAFE_INTEGER : until)])
     if (ran.exitCode !== 0) throw new Error(ran.stderr.slice(-400) || 'collect.py failed')
-    const data: { recent: Raw[]; older: Raw[] } = JSON.parse(ran.stdout)
-    const ids = new Set([...data.recent, ...data.older].map(s => s.id))
+    const data: { recent: Raw[]; older: Raw[]; archived?: string[] } = JSON.parse(ran.stdout)
+    const ids = new Set([...data.recent, ...data.older].map(s => s.id).concat(data.archived ?? []))
     const summaries = await summarize($, data.recent, ids)
     // An empty listing more likely means the records could not be read than no sessions.
     if (ids.size > 0) await prune($, ids)

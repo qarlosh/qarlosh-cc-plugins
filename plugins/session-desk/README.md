@@ -53,8 +53,9 @@ Set with `claude plugin configure session-desk@qarlosh-cc-plugins`.
 - Everything is read locally. For each session without a wrap-up, the last user message and
   the assistant's last reply (a few hundred characters) are sent to the model through your
   own Claude account to write its summary. Summaries are cached until the session changes.
-- Marks, done marks and summaries are kept in the plugin's own store, and dropped once a
-  session is archived or deleted.
+- Marks, done marks and summaries are kept in the plugin's own store. An archived session
+  leaves the pane but keeps them, so unarchiving it brings them back; they are dropped once
+  the session is deleted.
 - The desktop app's session records, sidebar preferences and `claude://` session links are
   not a documented interface. When something cannot be read the pane leaves it out (no
   section label, say) rather than failing; a new app version may still break it.

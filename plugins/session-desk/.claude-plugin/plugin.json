@@ -1,6 +1,6 @@
 {
   "name": "session-desk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A pane that reminds you of your open Claude Desktop sessions: where each one was left, with color marks and a done check to keep the list short.",
   "author": {
     "name": "Carlos Herrero"
