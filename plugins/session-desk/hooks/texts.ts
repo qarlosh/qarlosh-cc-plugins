@@ -1,3 +1,5 @@
+import type { Period } from '../types'
+
 // Every string the pane draws, by the `language` option.
 export type Language = 'en' | 'es'
 
@@ -8,9 +10,10 @@ export const TEXTS = {
     refresh: 'Refresh',
     reading: 'Going through your sessions…',
     updated: (ago: string) => `Updated ${ago}`,
-    nothing: (days: number) => `Nothing open in the last ${days} days.`,
-    count: (n: number, days: number) => `You have ${n} open ${n === 1 ? 'session' : 'sessions'} from the last ${days} days.`,
-    older: (open: boolean, n: number) => `${open ? '▾' : '▸'} Plus ${n} older open ${n === 1 ? 'session' : 'sessions'}`,
+    periods: { '48h': 'Last 48 hours', '2d-10d': '48 hours to 10 days ago', week: 'This week', '30d': 'Last 30 days' } as Record<Period, string>,
+    nothing: 'Nothing open in this period.',
+    count: (n: number) => `You have ${n} open ${n === 1 ? 'session' : 'sessions'} in this period.`,
+    older: (open: boolean, n: number) => `${open ? '▾' : '▸'} Plus ${n} open ${n === 1 ? 'session' : 'sessions'} outside this period`,
     done: (open: boolean, n: number) => `${open ? '▾' : '▸'} ${n} marked done`,
     restore: '↩ restore',
     pinned: '· pinned',
@@ -24,11 +27,11 @@ export const TEXTS = {
     refresh: 'Actualizar',
     reading: 'Repasando tus sesiones…',
     updated: (ago: string) => `Actualizado ${ago}`,
-    nothing: (days: number) => `Nada abierto en los últimos ${days} días.`,
-    count: (n: number, days: number) =>
-      `Tienes ${n} ${n === 1 ? 'sesión abierta' : 'sesiones abiertas'} de los últimos ${days} días.`,
+    periods: { '48h': 'Últimas 48 horas', '2d-10d': 'Entre 48 horas y 10 días', week: 'Semana actual', '30d': 'Últimos 30 días' } as Record<Period, string>,
+    nothing: 'Nada abierto en este periodo.',
+    count: (n: number) => `Tienes ${n} ${n === 1 ? 'sesión abierta' : 'sesiones abiertas'} en este periodo.`,
     older: (open: boolean, n: number) =>
-      `${open ? '▾' : '▸'} Además tienes ${n} ${n === 1 ? 'sesión abierta más antigua' : 'sesiones abiertas más antiguas'}`,
+      `${open ? '▾' : '▸'} Además tienes ${n} ${n === 1 ? 'sesión abierta' : 'sesiones abiertas'} fuera de este periodo`,
     done: (open: boolean, n: number) => `${open ? '▾' : '▸'} ${n} ${n === 1 ? 'marcada como hecha' : 'marcadas como hechas'}`,
     restore: '↩ recuperar',
     pinned: '· fijada',

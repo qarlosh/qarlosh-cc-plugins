@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { DeskSession, DotMessage, Mark } from '../types'
+import type { DeskSession, DotMessage, Mark, Period } from '../types'
 import { TEXTS } from './texts'
 import type { Language, Texts } from './texts'
 
@@ -16,19 +16,25 @@ const PALETTE: { mark: Mark; color: string }[] = [
   { mark: 'purple', color: '#a855f7' },
 ]
 const MARKS: Mark[] = PALETTE.map(p => p.mark)
+const PERIODS: Period[] = ['48h', '2d-10d', 'week', '30d']
+const HOUR = 3600000
+const DAY = 24 * HOUR
+// The model writes summaries this many sessions per call.
+const BATCH = 25
 
 const recent = atom({ plugin: 'session-desk', key: 'recent' } as const, [])
 const older = atom({ plugin: 'session-desk', key: 'older' } as const, [])
 const done = atom({ plugin: 'session-desk', key: 'done' } as const, {})
 const marks = atom({ plugin: 'session-desk', key: 'marks' } as const, {})
 const picking = atom({ plugin: 'session-desk', key: 'picking' } as const, '')
+const period = atom({ plugin: 'session-desk', key: 'period' } as const, '48h')
 const isLoading = atom({ plugin: 'session-desk', key: 'isLoading' } as const, false)
 const showDone = atom({ plugin: 'session-desk', key: 'showDone' } as const, false)
 const showOlder = atom({ plugin: 'session-desk', key: 'showOlder' } as const, false)
 const loadedAt = atom({ plugin: 'session-desk', key: 'loadedAt' } as const, 0)
 const error = atom({ plugin: 'session-desk', key: 'error' } as const, '')
 
-type Config = { windowDays: number; refreshMs: number; model: string; texts: Texts; groupByColor: boolean }
+type Config = { defaultPeriod: Period; refreshMs: number; model: string; texts: Texts; groupByColor: boolean }
 type Raw = {
   id: string
   title: string
@@ -43,14 +49,17 @@ type Raw = {
 type Summaries = Record<string, { at: number; text: string }>
 
 // Set by register from the plugin's options; the refresh timer runs while the pane is open.
-const config: Config = { windowDays: 2, refreshMs: 600000, model: 'haiku', texts: TEXTS.en, groupByColor: true }
+const config: Config = { defaultPeriod: '48h', refreshMs: 600000, model: 'haiku', texts: TEXTS.en, groupByColor: true }
 const timer: { current: { cancel: () => void } | null } = { current: null }
 
+function isPeriod(value: unknown): value is Period {
+  return PERIODS.includes(value as Period)
+}
+
 function configure(options: Record<string, unknown>) {
-  const days = Number(options.windowDays)
   const minutes = Number(options.refreshMinutes)
   const language: Language = options.language === 'es' ? 'es' : 'en'
-  config.windowDays = days > 0 ? days : 2
+  config.defaultPeriod = isPeriod(options.defaultPeriod) ? options.defaultPeriod : '48h'
   config.refreshMs = minutes > 0 ? minutes * 60000 : 0
   config.model = typeof options.model === 'string' && options.model.trim() !== '' ? options.model.trim() : 'haiku'
   config.texts = TEXTS[language]
@@ -69,11 +78,26 @@ function helper($: EngineInterface, args: string[]) {
   return $.process.run(['python3', `${$.plugin.root}/hooks/collect.py`, ...args], { timeoutMs: 60000 })
 }
 
-// Done marks, color marks and cached summaries outlive the session in $.store.
+// [since, until) in epoch ms; the week starts on Monday at midnight, local time.
+function rangeOf(p: Period, now: number): [number, number] {
+  if (p === '2d-10d') return [now - 10 * DAY, now - 48 * HOUR]
+  if (p === '30d') return [now - 30 * DAY, Infinity]
+  if (p === 'week') {
+    const monday = new Date(now)
+    monday.setHours(0, 0, 0, 0)
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7))
+    return [monday.getTime(), Infinity]
+  }
+  return [now - 48 * HOUR, Infinity]
+}
+
+// Done marks, color marks, the chosen period and cached summaries outlive the session in $.store.
 async function restore($: EngineInterface) {
+  const stored = await $.store.get('period')
+  await update($, period, () => (isPeriod(stored) ? stored : config.defaultPeriod))
   const doneMarks = ((await $.store.get('done')) ?? {}) as Record<string, number>
-  const stored = ((await $.store.get('marks')) ?? {}) as Record<string, string>
-  const colorMarks = Object.fromEntries(Object.entries(stored).filter(([, m]) => MARKS.includes(m as Mark)))
+  const storedMarks = ((await $.store.get('marks')) ?? {}) as Record<string, string>
+  const colorMarks = Object.fromEntries(Object.entries(storedMarks).filter(([, m]) => MARKS.includes(m as Mark)))
   await update($, done, () => doneMarks)
   await update($, marks, () => colorMarks as Record<string, Mark>)
 }
@@ -98,12 +122,13 @@ async function summarize($: EngineInterface, list: Raw[], ids: Set<string>): Pro
   for (const s of list) {
     if (s.recap && cache[s.id]?.at !== s.lastActivityAt) cache[s.id] = { at: s.lastActivityAt, text: s.recap }
   }
-  if (missing.length > 0) {
-    const prompt = missing.map(s => `### ${s.id}\nTitle: ${s.title}\nUser: ${s.user}\nAssistant: ${s.reply}\n`).join('\n')
+  for (let i = 0; i < missing.length; i += BATCH) {
+    const batch = missing.slice(i, i + BATCH)
+    const prompt = batch.map(s => `### ${s.id}\nTitle: ${s.title}\nUser: ${s.user}\nAssistant: ${s.reply}\n`).join('\n')
     const r = await $.model.complete({ model: config.model, system: instructions(), prompt, maxTokens: 4000 })
     if (!r.isAnswered) throw new Error(`model: ${r.reason}`)
     const answer: Record<string, string> = JSON.parse(r.text.slice(r.text.indexOf('{'), r.text.lastIndexOf('}') + 1))
-    for (const s of missing) cache[s.id] = { at: s.lastActivityAt, text: answer[s.id] ?? '' }
+    for (const s of batch) cache[s.id] = { at: s.lastActivityAt, text: answer[s.id] ?? '' }
   }
   await $.store.set('summaries', cache)
   return cache
@@ -131,7 +156,8 @@ async function load($: EngineInterface) {
   if (await read($, isLoading)) return
   await update($, isLoading, () => true)
   try {
-    const ran = await helper($, ['list', String(config.windowDays)])
+    const [since, until] = rangeOf(await read($, period), Date.now())
+    const ran = await helper($, ['list', String(since), String(until === Infinity ? Number.MAX_SAFE_INTEGER : until)])
     if (ran.exitCode !== 0) throw new Error(ran.stderr.slice(-400) || 'collect.py failed')
     const data: { recent: Raw[]; older: Raw[] } = JSON.parse(ran.stdout)
     const ids = new Set([...data.recent, ...data.older].map(s => s.id))
@@ -155,6 +181,13 @@ async function openPane($: EngineInterface) {
   timer.current?.cancel()
   timer.current = config.refreshMs > 0 ? $.clock.every(config.refreshMs, () => void load($)) : null
   void load($)
+}
+
+async function setPeriod($: EngineInterface, value: string) {
+  if (!isPeriod(value)) return
+  await $.store.set('period', value)
+  await update($, period, () => value)
+  await load($)
 }
 
 async function openSession($: EngineInterface, id: string) {
@@ -237,7 +270,7 @@ export const register: Register = (on, options) => {
       const { Text } = $.ui.resolve(e)
       return <Text>{t.unsupported}</Text>
     }
-    const { Box, Text, Button, Client } = $.ui.resolve(e)
+    const { Box, Text, Button, Client, Select } = $.ui.resolve(e)
     const doneMarks = await read($, done)
     const colorMarks = await read($, marks)
     const picker = await read($, picking)
@@ -250,6 +283,7 @@ export const register: Register = (on, options) => {
     const err = await read($, error)
     const doneOpen = await read($, showDone)
     const olderOpen = await read($, showOlder)
+    const current = await read($, period)
 
     // The desktop paints a Button's text in its own style, so the colored dot, the
     // palette and the done check are a Client of the plugin's that takes the click itself.
@@ -289,8 +323,7 @@ export const register: Register = (on, options) => {
       </Box>
     )
 
-    const intro =
-      when === 0 ? '' : visible.length === 0 ? t.nothing(config.windowDays) : t.count(visible.length, config.windowDays)
+    const intro = when === 0 ? '' : visible.length === 0 ? t.nothing : t.count(visible.length)
 
     return (
       <Box flexDirection="column" gap={1}>
@@ -304,6 +337,12 @@ export const register: Register = (on, options) => {
           )}
           {!loading && when !== 0 && <Text dimColor>{t.updated(ago(when))}</Text>}
         </Box>
+        <Select
+          key="period"
+          options={PERIODS.map(p => ({ value: p, label: t.periods[p] }))}
+          value={current}
+          onSelect={value => void setPeriod($, value)}
+        />
         {err !== '' && <Text color="error">{err}</Text>}
         {intro !== '' && <Text>{intro}</Text>}
         {visible.map(item)}

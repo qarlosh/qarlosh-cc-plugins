@@ -1,3 +1,6 @@
+// The stretch of time the pane lists in full; every other open session is counted below.
+export type Period = '48h' | '2d-10d' | 'week' | '30d'
+
 // A color mark the person puts on a session, by its key in the plugin's palette.
 export type Mark = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple'
 
@@ -25,6 +28,7 @@ declare module 'claude-code' {
       done: Record<string, number>
       marks: Record<string, Mark>
       picking: string
+      period: Period
       isLoading: boolean
       showDone: boolean
       showOlder: boolean

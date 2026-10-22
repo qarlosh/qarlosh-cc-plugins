@@ -25,10 +25,13 @@ const COMMAND = { command: 'session-desk', args: '' } as any
 
 // Beneath the plugin: an in-memory store and clock, the helper's answer, and the
 // engine's side of opening a pane and running a command.
-async function openPane($: any, on: any) {
+async function openPane($: any, on: any, calls: string[][] = []) {
   mock.store(on)
   mock.clock(on, { now: NOW })
-  on('process.run', async () => ({ value: { exitCode: 0, stdout: JSON.stringify(LISTING), stderr: '' } }))
+  on('process.run', async (_$: any, e: any) => {
+    calls.push([...e.argv])
+    return { value: { exitCode: 0, stdout: JSON.stringify(LISTING), stderr: '' } }
+  })
   on('ui.open', async () => ({ value: { isPlaced: true } }))
   on('command.run', async () => ({ text: '' }))
   await $.command.run(COMMAND)
@@ -72,5 +75,24 @@ test('a color mark washes the item and survives reopening the pane', async ($, o
 
   await ui.post({ type: 'mark', id: 'local_a', mark: null }, { in: 'dot-local_a' })
   expect((await ui.find({ key: 'item-local_a' }))?.props.backgroundColor).toBeUndefined()
+  await ui.unmount()
+})
+
+test('picking a period lists that range and is remembered', async ($, on) => {
+  const calls: string[][] = []
+  const ui = await openPane($, on, calls)
+  const range = () => calls.filter(c => c.includes('list')).at(-1)!.slice(-2).map(Number)
+
+  const [since48] = range()
+  expect(Date.now() - since48!).toBeGreaterThan(47 * 3600000)
+
+  await ui.select({ key: 'period', value: '2d-10d' })
+  const [since, until] = range()
+  expect(Date.now() - since!).toBeGreaterThan(9.9 * 86400000)
+  expect(Date.now() - until!).toBeGreaterThan(47.9 * 3600000)
+
+  // Reopening keeps the period picked in the pane.
+  await $.command.run(COMMAND)
+  expect((await ui.find({ key: 'period' }))?.props.value).toBe('2d-10d')
   await ui.unmount()
 })

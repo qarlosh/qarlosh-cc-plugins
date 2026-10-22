@@ -1,8 +1,10 @@
 # Helper for the session-desk pane, run with python3.
 #
-#   collect.py list <days>  reads the desktop app's session records, its sidebar sections,
-#                           projects and pins, and the tail of each transcript, and prints
-#                           one JSON object: sessions used within <days>, and older ones.
+#   collect.py list <since> <until>
+#                           reads the desktop app's session records, its sidebar sections,
+#                           projects and pins, and prints one JSON object: `recent`, the
+#                           sessions last used in [since, until) (epoch ms) with the tail
+#                           of their transcripts, and `older`, every other open session.
 #   collect.py open <url>   opens a claude:// link with the system's handler for it.
 #
 # The desktop app's records and preferences are undocumented: whatever cannot be read is
@@ -12,7 +14,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 
 if sys.argv[1] == 'open':
     # The system's own handler for the scheme: webbrowser would hand claude:// to a browser.
@@ -25,11 +26,10 @@ if sys.argv[1] == 'open':
         subprocess.run(['xdg-open', url], check=True)
     sys.exit(0)
 
-days = float(sys.argv[2])
+since, until = float(sys.argv[2]), float(sys.argv[3])
 home = os.path.expanduser('~')
 roots = [os.path.join(home, 'Library/Application Support/Claude'),
          os.path.join(os.environ.get('APPDATA', ''), 'Claude')]
-since = (time.time() - days * 86400) * 1000
 
 
 def epitaxy(root):
@@ -114,7 +114,7 @@ for root in roots:
                 'section': names.get(d['sessionId'], ''),
                 'pinned': d['sessionId'] in pins,
                 'folder': os.path.basename((d.get('cwd') or '').rstrip('/'))}
-        if base['lastActivityAt'] < since:
+        if not since <= base['lastActivityAt'] < until:
             older.append(base)
             continue
         user, reply, recap = tail(d.get('cliSessionId'))

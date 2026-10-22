@@ -3,7 +3,9 @@
 A pane for Claude Desktop that reminds you of your open Code sessions, so none is left
 forgotten for days. `/session-desk` opens it beside the current session.
 
-For each session used in the last days it shows:
+A selector picks the period listed in full: the last 48 hours, 48 hours to 10 days ago, this
+week (since Monday) or the last 30 days. The pane remembers the choice. For each session last
+used in that period it shows:
 
 - the title, which opens the session when pressed;
 - one line on where the session was left, taken from the session's own wrap-up when it has
@@ -16,7 +18,8 @@ You keep the list short by hand:
   restored. A done session comes back on its own when it gets new activity.
 - **●** opens a palette of six colors to mark a session your own way. With `groupByColor`
   on, marked sessions are listed first, grouped by color.
-- Older open sessions are counted below the list and can be expanded.
+- Open sessions outside the period are counted below the list and can be expanded. Marks and
+  done checks belong to the session, not the period: they stay when a session leaves it.
 
 The pane refreshes itself while it is open, and with the **Refresh** button.
 
@@ -39,7 +42,7 @@ Set with `claude plugin configure session-desk@qarlosh-cc-plugins`.
 
 | Option | Default | What it does |
 |---|---|---|
-| `windowDays` | `2` | Sessions used within this many days are listed in full |
+| `defaultPeriod` | `48h` | The period listed until you pick another: `48h`, `2d-10d`, `week` or `30d` |
 | `refreshMinutes` | `10` | How often the open pane refreshes; `0` only on open and on Refresh |
 | `model` | `haiku` | The model that writes the one-line summaries |
 | `language` | `en` | Language of the pane and the summaries: `en` or `es` |
