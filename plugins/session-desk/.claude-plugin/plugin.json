@@ -1,0 +1,43 @@
+{
+  "name": "session-desk",
+  "version": "0.1.0",
+  "description": "A pane that reminds you of your open Claude Desktop sessions: where each one was left, with color marks and a done check to keep the list short.",
+  "author": {
+    "name": "Carlos Herrero"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "windowDays": {
+      "type": "number",
+      "title": "Window (days)",
+      "description": "Sessions used within this many days are listed in full; older open sessions are counted below them.",
+      "default": 2
+    },
+    "refreshMinutes": {
+      "type": "number",
+      "title": "Refresh interval (minutes)",
+      "description": "How often the open pane refreshes itself. 0 refreshes only on open and on the Refresh button.",
+      "default": 10
+    },
+    "model": {
+      "type": "string",
+      "title": "Model",
+      "description": "The model that writes the one-line summary of each session (an alias such as haiku, or a full model id).",
+      "default": "haiku"
+    },
+    "language": {
+      "type": "string",
+      "title": "Language",
+      "description": "Language of the pane and of the summaries.",
+      "options": ["en", "es"],
+      "default": "en"
+    },
+    "groupByColor": {
+      "type": "boolean",
+      "title": "Group by color",
+      "description": "List marked sessions first, grouped by color. Off, the list keeps the most recent first.",
+      "default": true
+    }
+  }
+}

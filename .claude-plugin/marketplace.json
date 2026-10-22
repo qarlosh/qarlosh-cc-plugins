@@ -11,6 +11,11 @@
       "name": "blackbox",
       "source": "./plugins/blackbox",
       "description": "A flight recorder for Claude Code sessions: subagents, tools, skills, hooks and texts, recorded live and shown in a local viewer as a tree, a timeline and a sequence diagram."
+    },
+    {
+      "name": "session-desk",
+      "source": "./plugins/session-desk",
+      "description": "A Claude Desktop pane that reminds you of your open sessions: where each one was left, with color marks and a done check to keep the list short."
     }
   ]
 }

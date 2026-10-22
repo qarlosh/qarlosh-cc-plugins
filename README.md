@@ -15,6 +15,7 @@ claude plugin install <plugin>@qarlosh-cc-plugins
 | Plugin | What it does |
 |---|---|
 | [blackbox](plugins/blackbox) | A flight recorder for Claude Code sessions: subagents, tools, skills, hooks and texts, recorded live and shown in a local viewer |
+| [session-desk](plugins/session-desk) | A Claude Desktop pane that reminds you of your open sessions, with color marks and a done check |
 
 ## License
 
