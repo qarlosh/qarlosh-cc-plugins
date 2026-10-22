@@ -114,3 +114,12 @@ test('an archived session leaves the pane but keeps its mark', async ($, on) => 
   expect((await ui.find({ key: 'item-local_a' }))?.props.backgroundColor).toBe('#3b82f624')
   await ui.unmount()
 })
+
+test('done sessions follow the period; those outside it are listed with the outside ones', async ($, on) => {
+  const ui = await openPane($, on)
+  await ui.press({ key: 'toggle-older' })
+  await ui.post({ type: 'done', id: 'local_b' }, { in: 'done-local_b' })
+  expect(await ui.find({ key: 'toggle-done' })).toBeUndefined()
+  expect(await ui.find({ key: 'undo-local_b' })).toBeDefined()
+  await ui.unmount()
+})

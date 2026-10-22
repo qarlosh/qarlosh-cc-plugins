@@ -277,8 +277,12 @@ export const register: Register = (on, options) => {
     const picker = await read($, picking)
     const all = await read($, recent)
     const visible = arrange(all.filter(s => !isHidden(s, doneMarks)), colorMarks)
-    const hidden = [...all, ...(await read($, older))].filter(s => isHidden(s, doneMarks))
-    const old = arrange((await read($, older)).filter(s => !isHidden(s, doneMarks)), colorMarks)
+    const outside = await read($, older)
+    // Done sessions follow the period too: those outside it sit at the end of the
+    // outside list, so every done session stays reachable to restore.
+    const hidden = all.filter(s => isHidden(s, doneMarks))
+    const old = arrange(outside.filter(s => !isHidden(s, doneMarks)), colorMarks)
+    const oldDone = outside.filter(s => isHidden(s, doneMarks))
     const loading = await read($, isLoading)
     const when = await read($, loadedAt)
     const err = await read($, error)
@@ -324,6 +328,17 @@ export const register: Register = (on, options) => {
       </Box>
     )
 
+    const doneRow = (s: DeskSession) => (
+      <Box key={`hidden-${s.id}`} flexDirection="row" gap={1} paddingLeft={2}>
+        <Text dimColor strikethrough>
+          {s.title}
+        </Text>
+        <Button key={`undo-${s.id}`} plain dimColor onPress={() => void markDone($, s.id, false)}>
+          {t.restore}
+        </Button>
+      </Box>
+    )
+
     const intro = when === 0 ? '' : visible.length === 0 ? t.nothing : t.count(visible.length)
 
     return (
@@ -347,12 +362,13 @@ export const register: Register = (on, options) => {
         {err !== '' && <Text color="error">{err}</Text>}
         {intro !== '' && <Text>{intro}</Text>}
         {visible.map(item)}
-        {old.length > 0 && (
+        {old.length + oldDone.length > 0 && (
           <Box flexDirection="column" gap={1}>
             <Button key="toggle-older" plain dimColor onPress={() => void update($, showOlder, v => !v)}>
-              {t.older(olderOpen, old.length)}
+              {t.older(olderOpen, old.length + oldDone.length)}
             </Button>
             {olderOpen && old.map(item)}
+            {olderOpen && oldDone.length > 0 && <Box flexDirection="column">{oldDone.map(doneRow)}</Box>}
           </Box>
         )}
         {hidden.length > 0 && (
@@ -360,17 +376,7 @@ export const register: Register = (on, options) => {
             <Button key="toggle-done" plain dimColor onPress={() => void update($, showDone, v => !v)}>
               {t.done(doneOpen, hidden.length)}
             </Button>
-            {doneOpen &&
-              hidden.map(s => (
-                <Box key={`hidden-${s.id}`} flexDirection="row" gap={1} paddingLeft={2}>
-                  <Text dimColor strikethrough>
-                    {s.title}
-                  </Text>
-                  <Button key={`undo-${s.id}`} plain dimColor onPress={() => void markDone($, s.id, false)}>
-                    {t.restore}
-                  </Button>
-                </Box>
-              ))}
+            {doneOpen && hidden.map(doneRow)}
           </Box>
         )}
       </Box>
