@@ -10,7 +10,7 @@ test('a tool call reaches the engine untouched and its result comes back unchang
     return { result: { stdout: 'hi', stderr: '', interrupted: false }, text: 'hi' } as any
   })
   const call = { tool: 'Bash', command: 'echo hi', description: 'Say hi' }
-  const r: any = await $.tool.call(call as any)
+  const r: any = await ($.tool.call as any)(call)
   expect(seen).toMatchObject(call)
   expect(r.text).toBe('hi')
   expect(r.isError).toBeUndefined()

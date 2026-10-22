@@ -84,22 +84,24 @@ call when it ran in the foreground.
 |---|---|---|
 | `skill.load` | `tool.call` with `tool: 'Skill'` that succeeded | `skill`, `via: 'tool'`, `toolUseId`, `args?`, `status?` (`inline`, `forked`) |
 | `skill.load` | `prompt.submit` whose text is `/<name> …` for a listed skill | `skill`, `via: 'command'`, `args?` |
-| `skill.expand` | `skill.prompt`, where it reaches a user plugin | `skill`, `textLen` |
+| `skill.expand` | `skill.prompt`, until 0.7.1 (see below) | `skill`, `textLen` |
 
 `skill.prompt` would also catch skills preloaded into a subagent, but a built-in security plugin
-answers it before user plugins in current builds, so `skill.expand` is usually absent and
-preloaded skills are not seen.
+answers it before user plugins, so the hook never ran and 0.7.2 removed it. Logs from earlier
+versions may hold a few `skill.expand` records; the viewer still reads them. Preloaded skills are
+not seen.
 
 ### Settings hooks
 
 | `kind` | Source | Fields |
 |---|---|---|
-| `hook` | `classic.*`, timed around `next`, where it reaches a user plugin | `event` (`PreToolUse`, `Stop`, …), `durationMs`, `toolUseId?`, `promptId?`, `outcome` |
+| `hook` | `classic.*`, timed around `next`, until 0.7.1 (see below) | `event` (`PreToolUse`, `Stop`, …), `durationMs`, `toolUseId?`, `promptId?`, `outcome` |
 
 `outcome` is the aggregated result of every settings hook on that event: `{ block?, decision?,
-stopReason?, preventContinuation?, hasContext? }`. In current builds a built-in security plugin
-(`cc-plugin-sec-default`) skips user plugins on every `classic.*` event, so `hook` records are
-usually absent. Settings hooks are still seen: each run leaves a `row` with `origin.kind: 'hook'`
+stopReason?, preventContinuation?, hasContext? }`. A built-in security plugin
+(`cc-plugin-sec-default`) skips user plugins on every `classic.*` event, so the hook almost never
+ran, and 0.7.2 removed it (see "Removed hooks" in development.md). The viewer still reads `hook`
+records in older logs. Settings hooks are seen another way: each run leaves a `row` with `origin.kind: 'hook'`
 (`origin.event` names the event, `name` is `hook_success`, `hook_additional_context`, …), and the
 viewer joins it by `uuid` to the transcript (`session.info.transcriptPath`), whose attachment holds
 `hookName`, `command`, `durationMs`, `exitCode`, `stdout`, `stderr`.

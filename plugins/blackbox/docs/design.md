@@ -147,7 +147,8 @@ What these mean in use (symptom → cause) is in [limitations.md](limitations.md
   and flushes them with `$.process.run(["/bin/sh", "-c", "cat >> \"$0\"", path], { stdin })`.
 - `session.end` gets about 1.5 s shared with other plugins: the final flush must be quick.
 - A built-in security plugin (`cc-plugin-sec-default`, tier `prepend`) skips user plugins on every
-  `classic.*` event and answers `skill.prompt` before them. Settings hooks are therefore seen
+  `classic.*` event and answers `skill.prompt` before them, so the collector does not hook either
+  (see "Removed hooks" in development.md). Settings hooks are therefore seen
   through the rows they leave (`session.append` with `origin.kind: 'hook'`), joined by the viewer
   to the transcript's `hook_success` / `hook_additional_context` attachments for the per-command
   detail (hook name, command, duration, exit code, output). The collector finds the transcript

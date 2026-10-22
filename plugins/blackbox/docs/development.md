@@ -68,8 +68,8 @@ held then; if a check fails, start here.
 | Behaviour | Where it is used | How it was found |
 |---|---|---|
 | The mod API itself (event names and fields) is "early access" and may change without notice | Everything in `register.tsx` | The types file says so |
-| `cc-plugin-sec-default` skips user plugins on every `classic.*` event, and answers `skill.prompt` first | Why there are no `hook` records and skills come from the Skill tool | `--debug`: `classic.<Event> bypassed by cc-plugin-sec-default` |
-| In a session that fails to authenticate, `classic.*` events do reach the plugin | Explains `hook` records in failed sessions | Seen twice, both with an expired login |
+| `cc-plugin-sec-default` skips user plugins on every `classic.*` event, and answers `skill.prompt` first | Why the collector hooks neither, and skills come from the Skill tool | `--debug`: `classic.<Event> bypassed by cc-plugin-sec-default`; from 2.1.308 also a line in the conversation per skip |
+| In a session that fails to authenticate, `classic.*` events do reach the plugin | Explains `hook` records in old logs of failed sessions | Seen twice, both with an expired login (0.6) |
 | Each settings-hook run leaves a conversation row: `session.append` with `origin.kind: 'hook'`, `origin.event`, `name` such as `hook_success`, and no payload | How the viewer sees hooks at all | Logs |
 | Hook rows are appended after the tool ends, not when the hook runs | Attaching hooks to the tool just ended | Record order in logs |
 | The transcript keeps no `hook_success` detail, except `UserPromptSubmit` (`hookName`, `command`, `durationMs`) | `transcript_hooks()` in the server | Grep over transcripts |
@@ -107,3 +107,23 @@ Left for later sessions, roughly in order of value:
 5. **Smaller**: per-command hook detail if a later Claude Code exposes it; deduplicate the injected
    context repeated on every turn (log size); the components view reads every log in the browser,
    which will need a server-side index once there are hundreds of sessions.
+
+## Removed hooks
+
+0.7.2 removed two hooks that `cc-plugin-sec-default` skipped in every normal session, because
+Claude Code 2.1.308 started showing a line in the conversation for each skip:
+
+| Hook | Recorded | Replaced by |
+|---|---|---|
+| `classic.*`, timed around `next` | `hook` (event, duration, tool or prompt id, aggregated outcome) | Hook rows (`row` with `origin.kind: 'hook'`) joined to the transcript |
+| `skill.prompt` | `skill.expand` (skill, text length); would also catch skills preloaded into a subagent | `skill.load` from the Skill tool and `/<name>` prompts |
+
+The viewer and `tools/selfcheck.py` still read both kinds. To restore them, check first that the
+skip is gone: in a session started with `claude --debug`, no `bypassed by cc-plugin-sec-default`
+lines for `classic.*` or `skill.prompt`. Then bring the two hooks back from 0.7.1:
+
+```bash
+git show 8333b2b:plugins/blackbox/hooks/register.tsx | sed -n "/on('skill.prompt'/,\$p"
+```
+
+`8333b2b` is the 0.7.1 commit, the last with both hooks.

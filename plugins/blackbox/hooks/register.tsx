@@ -442,42 +442,4 @@ export const register: Register = (on, options) => {
     })
     return r
   }).catch(($, e, next) => next(e))
-
-  // Skills
-
-  // Where the engine lets a user plugin see it (a built-in security plugin may
-  // answer it first), the expanded skill text: `skill.expand`.
-  on('skill.prompt', ($, e, next) => {
-    c.observe('skill', () => c.push('skill.expand', null, { skill: e.skill, textLen: typeof e.text === 'string' ? e.text.length : undefined }))
-    return next(e)
-  }).catch(($, e, next) => next(e))
-
-  // Settings hooks
-
-  on('classic.*', async ($, e, next) => {
-    const t0 = c.now()
-    const r = await next(e)
-    c.observe('hook', () => {
-      const ev = e as any
-      const event: string = ev.hook_event_name ?? 'PreToolUse'
-      if (!c.sessionInfoSeen && typeof ev.transcript_path === 'string') {
-        c.sessionInfoSeen = true
-        c.push('session.info', null, { transcriptPath: ev.transcript_path, cwd: ev.cwd, permissionMode: ev.permission_mode })
-      }
-      const outcome: Json = {}
-      for (const [k, v] of Object.entries((r ?? {}) as Json)) {
-        if (v === undefined || v === null || v === false || v === '') continue
-        if (k === 'additionalContext') outcome.hasContext = true
-        else c.put(outcome, k, typeof v === 'string' ? v.slice(0, 500) : v)
-      }
-      c.push('hook', ev.agent_id, {
-        event,
-        durationMs: Math.round(c.now() - t0),
-        toolUseId: ev.tool_use_id,
-        promptId: ev.prompt_id,
-        outcome: Object.keys(outcome).length ? outcome : undefined,
-      })
-    })
-    return r
-  }).catch(($, e, next) => next(e))
 }

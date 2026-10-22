@@ -7,7 +7,8 @@ then the cause. Found on Claude Code 2.1.295; later builds may change any of the
 
 - **No `hook` records.** A built-in security plugin, `cc-plugin-sec-default` (tier `prepend`),
   skips user plugins on every `classic.*` event (the debug log says `classic.<Event> bypassed by
-  cc-plugin-sec-default`). Settings hooks are still visible through the `row` they leave
+  cc-plugin-sec-default`, and from Claude Code 2.1.308 the conversation shows a line for each
+  skip), so 0.7.2 stopped hooking them. Settings hooks are still visible through the `row` they leave
   (`origin.kind: 'hook'`), and the viewer infers which configured hook each one was (next
   entry). A hook that runs
   without leaving a row is not seen at all. In one session that failed to authenticate the
@@ -27,8 +28,8 @@ then the cause. Found on Claude Code 2.1.295; later builds may change any of the
 - **A hook row may hang from the wrong tool** when several tools of one agent run at once: rows
   carry no tool id, so the viewer attaches them to the only running tool, or the one just ended.
 - **No skill preloaded into a subagent.** The same plugin answers `skill.prompt` before user
-  plugins. Skill loads are taken from the Skill tool call and from prompts typed as `/<name>`;
-  `skill.expand` records appear only where `skill.prompt` reaches the plugin.
+  plugins, so 0.7.2 stopped hooking it. Skill loads are taken from the Skill tool call and from
+  prompts typed as `/<name>`.
 - **Empty thinking, sometimes.** Some thinking blocks reach plugins with no text (the row shows a
   `thinking` block with `text: ''`); in other turns of the same session the text is there.
 - **Server-side tools** (run by the API, such as the advisor) never fire `tool.call`; they appear

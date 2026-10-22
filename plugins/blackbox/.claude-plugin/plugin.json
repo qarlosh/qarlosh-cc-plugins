@@ -1,6 +1,6 @@
 {
   "name": "blackbox",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "A flight recorder for Claude Code sessions: records what a session does (subagents, tools, skills, hooks, texts) without changing it, to follow it live or review it later.",
   "author": {
     "name": "Carlos Herrero"
